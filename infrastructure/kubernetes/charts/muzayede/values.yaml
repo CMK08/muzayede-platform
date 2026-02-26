@@ -1,0 +1,548 @@
+###############################################################################
+# Muzayede Platform — Helm Values (defaults)
+###############################################################################
+
+global:
+  environment: production
+  imagePullPolicy: IfNotPresent
+  imageRegistry: ""  # e.g., 123456789012.dkr.ecr.eu-central-1.amazonaws.com
+  namespace: muzayede
+  domain: muzayede.com
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+# ---------------------------------------------------------------------------
+# Service Definitions (15 services)
+# ---------------------------------------------------------------------------
+services:
+  # --- API Gateway ---
+  api-gateway:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/api-gateway
+      tag: latest
+    containerPort: 3000
+    service:
+      type: ClusterIP
+      port: 3000
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3000"
+    healthCheck:
+      path: /health
+      port: 3000
+    ingress:
+      enabled: true
+      path: /api
+      pathType: Prefix
+
+  # --- Auth Service ---
+  auth-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/auth-service
+      tag: latest
+    containerPort: 3001
+    service:
+      type: ClusterIP
+      port: 3001
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3001"
+    healthCheck:
+      path: /health
+      port: 3001
+    ingress:
+      enabled: false
+
+  # --- User Service ---
+  user-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/user-service
+      tag: latest
+    containerPort: 3002
+    service:
+      type: ClusterIP
+      port: 3002
+    resources:
+      requests:
+        cpu: 200m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3002"
+    healthCheck:
+      path: /health
+      port: 3002
+    ingress:
+      enabled: false
+
+  # --- Auction Service ---
+  auction-service:
+    enabled: true
+    replicaCount: 3
+    image:
+      repository: muzayede/auction-service
+      tag: latest
+    containerPort: 3003
+    service:
+      type: ClusterIP
+      port: 3003
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPU: 60
+      targetMemory: 70
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3003"
+    healthCheck:
+      path: /health
+      port: 3003
+    ingress:
+      enabled: false
+
+  # --- Bid Service ---
+  bid-service:
+    enabled: true
+    replicaCount: 3
+    image:
+      repository: muzayede/bid-service
+      tag: latest
+    containerPort: 3004
+    service:
+      type: ClusterIP
+      port: 3004
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPU: 60
+      targetMemory: 70
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3004"
+    healthCheck:
+      path: /health
+      port: 3004
+    ingress:
+      enabled: false
+
+  # --- Payment Service ---
+  payment-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/payment-service
+      tag: latest
+    containerPort: 3005
+    service:
+      type: ClusterIP
+      port: 3005
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3005"
+    healthCheck:
+      path: /health
+      port: 3005
+    ingress:
+      enabled: false
+
+  # --- Notification Service ---
+  notification-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/notification-service
+      tag: latest
+    containerPort: 3006
+    service:
+      type: ClusterIP
+      port: 3006
+    resources:
+      requests:
+        cpu: 200m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3006"
+    healthCheck:
+      path: /health
+      port: 3006
+    ingress:
+      enabled: false
+
+  # --- Search Service ---
+  search-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/search-service
+      tag: latest
+    containerPort: 3007
+    service:
+      type: ClusterIP
+      port: 3007
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3007"
+    healthCheck:
+      path: /health
+      port: 3007
+    ingress:
+      enabled: false
+
+  # --- Media Service ---
+  media-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/media-service
+      tag: latest
+    containerPort: 3008
+    service:
+      type: ClusterIP
+      port: 3008
+    resources:
+      requests:
+        cpu: 200m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3008"
+    healthCheck:
+      path: /health
+      port: 3008
+    ingress:
+      enabled: false
+
+  # --- Category Service ---
+  category-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/category-service
+      tag: latest
+    containerPort: 3009
+    service:
+      type: ClusterIP
+      port: 3009
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3009"
+    healthCheck:
+      path: /health
+      port: 3009
+    ingress:
+      enabled: false
+
+  # --- Analytics Service ---
+  analytics-service:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/analytics-service
+      tag: latest
+    containerPort: 3010
+    service:
+      type: ClusterIP
+      port: 3010
+    resources:
+      requests:
+        cpu: 200m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3010"
+    healthCheck:
+      path: /health
+      port: 3010
+    ingress:
+      enabled: false
+
+  # --- WebSocket Service ---
+  websocket-service:
+    enabled: true
+    replicaCount: 3
+    image:
+      repository: muzayede/websocket-service
+      tag: latest
+    containerPort: 3011
+    service:
+      type: ClusterIP
+      port: 3011
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPU: 60
+      targetMemory: 70
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3011"
+    healthCheck:
+      path: /health
+      port: 3011
+    ingress:
+      enabled: true
+      path: /ws
+      pathType: Prefix
+
+  # --- Admin Service ---
+  admin-service:
+    enabled: true
+    replicaCount: 1
+    image:
+      repository: muzayede/admin-service
+      tag: latest
+    containerPort: 3012
+    service:
+      type: ClusterIP
+      port: 3012
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 3
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3012"
+    healthCheck:
+      path: /health
+      port: 3012
+    ingress:
+      enabled: true
+      path: /admin
+      pathType: Prefix
+
+  # --- Scheduler Service ---
+  scheduler-service:
+    enabled: true
+    replicaCount: 1
+    image:
+      repository: muzayede/scheduler-service
+      tag: latest
+    containerPort: 3013
+    service:
+      type: ClusterIP
+      port: 3013
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 1
+      targetCPU: 80
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3013"
+    healthCheck:
+      path: /health
+      port: 3013
+    ingress:
+      enabled: false
+
+  # --- Web Frontend ---
+  web-frontend:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/web-frontend
+      tag: latest
+    containerPort: 3000
+    service:
+      type: ClusterIP
+      port: 3000
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: NODE_ENV
+        value: production
+    healthCheck:
+      path: /
+      port: 3000
+    ingress:
+      enabled: true
+      path: /
+      pathType: Prefix

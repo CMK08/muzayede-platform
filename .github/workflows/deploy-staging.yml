@@ -1,0 +1,198 @@
+###############################################################################
+# Deploy to Staging — On push to develop branch
+###############################################################################
+
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com
+  EKS_CLUSTER: muzayede-staging
+  HELM_RELEASE: muzayede-staging
+  NAMESPACE: muzayede-staging
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build & Push Docker Images
+  # ---------------------------------------------------------------------------
+  build-push:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - user-service
+          - auction-service
+          - bid-service
+          - payment-service
+          - notification-service
+          - search-service
+          - media-service
+          - category-service
+          - analytics-service
+          - websocket-service
+          - admin-service
+          - scheduler-service
+          - web-frontend
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/muzayede/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=staging-
+            type=raw,value=staging-latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=staging
+            BUILD_SHA=${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Deploy to EKS Staging
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to EKS Staging
+    runs-on: ubuntu-latest
+    needs: [build-push]
+    environment:
+      name: staging
+      url: https://staging.muzayede.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ env.EKS_CLUSTER }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.0"
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy with Helm
+        run: |
+          IMAGE_TAG="staging-$(echo ${{ github.sha }} | cut -c1-7)"
+
+          helm upgrade --install ${{ env.HELM_RELEASE }} \
+            infrastructure/kubernetes/charts/muzayede \
+            --namespace ${{ env.NAMESPACE }} \
+            --set global.environment=staging \
+            --set global.imageRegistry=${{ env.ECR_REGISTRY }} \
+            --set global.domain=staging.muzayede.com \
+            --set global.tls.clusterIssuer=letsencrypt-staging \
+            --set "services.api-gateway.image.tag=${IMAGE_TAG}" \
+            --set "services.auth-service.image.tag=${IMAGE_TAG}" \
+            --set "services.user-service.image.tag=${IMAGE_TAG}" \
+            --set "services.auction-service.image.tag=${IMAGE_TAG}" \
+            --set "services.bid-service.image.tag=${IMAGE_TAG}" \
+            --set "services.payment-service.image.tag=${IMAGE_TAG}" \
+            --set "services.notification-service.image.tag=${IMAGE_TAG}" \
+            --set "services.search-service.image.tag=${IMAGE_TAG}" \
+            --set "services.media-service.image.tag=${IMAGE_TAG}" \
+            --set "services.category-service.image.tag=${IMAGE_TAG}" \
+            --set "services.analytics-service.image.tag=${IMAGE_TAG}" \
+            --set "services.websocket-service.image.tag=${IMAGE_TAG}" \
+            --set "services.admin-service.image.tag=${IMAGE_TAG}" \
+            --set "services.scheduler-service.image.tag=${IMAGE_TAG}" \
+            --set "services.web-frontend.image.tag=${IMAGE_TAG}" \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment --namespace ${{ env.NAMESPACE }} --timeout=5m
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against staging..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://staging.muzayede.com/api/health || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i: Got status $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 10 attempts"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Notify
+  # ---------------------------------------------------------------------------
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ needs.deploy.result }}
+          fields: repo,commit,author,action,workflow
+          mention: channel
+          if_mention: failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''

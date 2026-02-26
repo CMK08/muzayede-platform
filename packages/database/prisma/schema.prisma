@@ -1,0 +1,986 @@
+// Müzayede Platformu — Prisma Schema
+// PostgreSQL 16
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// KULLANICI YÖNETİMİ
+// ============================================================
+
+enum UserRole {
+  BUYER
+  SELLER
+  AUCTION_HOUSE
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String?   @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(BUYER)
+  isActive      Boolean   @default(true) @map("is_active")
+  isVerified    Boolean   @default(false) @map("is_verified")
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret")
+  trustScore    Float     @default(50.0) @map("trust_score")
+  kycStatus     KycStatus @default(NOT_SUBMITTED) @map("kyc_status")
+  avatarUrl     String?   @map("avatar_url")
+  language      String    @default("tr")
+  theme         Theme     @default(SYSTEM)
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  profile       UserProfile?
+  oauthAccounts OAuthAccount[]
+  bids          Bid[]
+  buyerOrders   Order[]          @relation("BuyerOrders")
+  sellerOrders  Order[]          @relation("SellerOrders")
+  products      Product[]
+  favorites     Favorite[]
+  notifications Notification[]
+  notificationPreferences NotificationPreference[]
+  blacklistEntries UserBlacklist[] @relation("BlacklistedUser")
+  blacklistActions UserBlacklist[] @relation("BlockedByUser")
+  sellerProfile SellerProfile?
+  kycDocuments  KycDocument[]
+  badges        UserBadge[]
+  auctionFollows AuctionFollow[]
+  createdAuctions Auction[]      @relation("CreatedByUser")
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique @map("user_id")
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  displayName String?  @map("display_name")
+  bio         String?
+  address     String?
+  city        String?
+  country     String?
+  postalCode  String?  @map("postal_code")
+  interests   String[] @default([])
+  dateOfBirth DateTime? @map("date_of_birth")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model OAuthAccount {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  provider   String   // google, apple, facebook
+  providerId String   @map("provider_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@map("oauth_accounts")
+}
+
+model KycDocument {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  documentType String   @map("document_type") // identity_card, passport, address_proof
+  documentUrl  String   @map("document_url")
+  status       KycStatus @default(PENDING)
+  reviewNote   String?  @map("review_note")
+  reviewedAt   DateTime? @map("reviewed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_documents")
+}
+
+model UserBlacklist {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  reason     String
+  blockedBy  String    @map("blocked_by")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user      User @relation("BlacklistedUser", fields: [userId], references: [id])
+  blockedByUser User @relation("BlockedByUser", fields: [blockedBy], references: [id])
+
+  @@map("user_blacklist")
+}
+
+// ============================================================
+// MÜZAYEDE YÖNETİMİ
+// ============================================================
+
+enum AuctionType {
+  ENGLISH        // İngiliz Usulü
+  DUTCH          // Hollanda Usulü
+  SEALED_BID     // Kapalı Zarf
+  VICKREY        // İkinci Fiyat
+  TIMED          // Zamanlı Online
+  HYBRID         // Ön Pey + Salon
+}
+
+enum AuctionStatus {
+  DRAFT
+  PUBLISHED
+  PRE_BID
+  LIVE
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+model Auction {
+  id                   String        @id @default(cuid())
+  title                String
+  slug                 String        @unique
+  description          String?
+  type                 AuctionType
+  status               AuctionStatus @default(DRAFT)
+  startPrice           Decimal       @map("start_price") @db.Decimal(18, 2)
+  reservePrice         Decimal?      @map("reserve_price") @db.Decimal(18, 2)
+  reserveMet           Boolean       @default(false) @map("reserve_met")
+  currentPrice         Decimal?      @map("current_price") @db.Decimal(18, 2)
+  minIncrement         Decimal       @map("min_increment") @db.Decimal(18, 2)
+  buyerCommissionRate  Decimal       @default(0) @map("buyer_commission_rate") @db.Decimal(5, 4)
+  sellerCommissionRate Decimal       @default(0) @map("seller_commission_rate") @db.Decimal(5, 4)
+  currency             String        @default("TRY")
+  startDate            DateTime      @map("start_date")
+  endDate              DateTime      @map("end_date")
+  actualEndDate        DateTime?     @map("actual_end_date")
+  antiSnipeMinutes     Int           @default(5) @map("anti_snipe_minutes")
+  antiSnipeExtension   Int           @default(3) @map("anti_snipe_extension") // minutes
+  bidCount             Int           @default(0) @map("bid_count")
+  viewCount            Int           @default(0) @map("view_count")
+  // Dutch auction specific
+  dutchStartPrice      Decimal?      @map("dutch_start_price") @db.Decimal(18, 2)
+  dutchDecrement       Decimal?      @map("dutch_decrement") @db.Decimal(18, 2)
+  dutchDecrementInterval Int?        @map("dutch_decrement_interval") // seconds
+  // Buy It Now
+  buyNowPrice          Decimal?      @map("buy_now_price") @db.Decimal(18, 2)
+  buyNowEnabled        Boolean       @default(false) @map("buy_now_enabled")
+  // Relations
+  auctionHouseId       String?       @map("auction_house_id")
+  createdBy            String        @map("created_by")
+  coverImageUrl        String?       @map("cover_image_url")
+  catalogPdfUrl        String?       @map("catalog_pdf_url")
+  isLiveStreaming       Boolean       @default(false) @map("is_live_streaming")
+  streamUrl            String?       @map("stream_url")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  lots        AuctionLot[]
+  bids        Bid[]
+  orders      Order[]
+  follows     AuctionFollow[]
+  increments  BidIncrement[]
+  creator     User           @relation("CreatedByUser", fields: [createdBy], references: [id])
+  sellerProfile SellerProfile? @relation(fields: [auctionHouseId], references: [id])
+
+  @@index([status, startDate])
+  @@index([type, status])
+  @@index([auctionHouseId])
+  @@map("auctions")
+}
+
+model AuctionLot {
+  id         String   @id @default(cuid())
+  auctionId  String   @map("auction_id")
+  productId  String   @map("product_id")
+  lotNumber  Int      @map("lot_number")
+  sortOrder  Int      @map("sort_order")
+  status     String   @default("pending") // pending, active, sold, unsold, withdrawn
+  hammerPrice Decimal? @map("hammer_price") @db.Decimal(18, 2)
+  winnerId   String?  @map("winner_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([auctionId, lotNumber])
+  @@map("auction_lots")
+}
+
+model AuctionFollow {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  auctionId String   @map("auction_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, auctionId])
+  @@map("auction_follows")
+}
+
+// ============================================================
+// ÜRÜN / LOT YÖNETİMİ
+// ============================================================
+
+enum ProductCondition {
+  NEW
+  USED
+  RESTORED
+}
+
+model Product {
+  id               String           @id @default(cuid())
+  title            String
+  slug             String           @unique
+  shortDescription String?          @map("short_description")
+  descriptionHtml  String?          @map("description_html")
+  categoryId       String?          @map("category_id")
+  condition        ProductCondition @default(USED)
+  provenanceText   String?          @map("provenance_text")
+  certificateUrl   String?          @map("certificate_url")
+  estimateLow      Decimal?         @map("estimate_low") @db.Decimal(18, 2)
+  estimateHigh     Decimal?         @map("estimate_high") @db.Decimal(18, 2)
+  sellerId         String           @map("seller_id")
+  artistId         String?          @map("artist_id")
+  isActive         Boolean          @default(true) @map("is_active")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  category   Category?         @relation(fields: [categoryId], references: [id])
+  seller     User              @relation(fields: [sellerId], references: [id])
+  artist     Artist?           @relation(fields: [artistId], references: [id])
+  media      ProductMedia[]
+  attributes ProductAttribute[]
+  tags       ProductTag[]
+  lots       AuctionLot[]
+  favorites  Favorite[]
+  nftCertificates NftCertificate[]
+  provenanceRecords ProvenanceRecord[]
+  fractionalTokens  FractionalToken[]
+
+  @@index([categoryId])
+  @@index([sellerId])
+  @@index([artistId])
+  @@map("products")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  THREE_SIXTY
+}
+
+model ProductMedia {
+  id        String    @id @default(cuid())
+  productId String    @map("product_id")
+  type      MediaType
+  url       String
+  thumbnailUrl String? @map("thumbnail_url")
+  sortOrder Int       @default(0) @map("sort_order")
+  isPrimary Boolean   @default(false) @map("is_primary")
+  width     Int?
+  height    Int?
+  fileSize  Int?      @map("file_size")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_media")
+}
+
+model ProductAttribute {
+  id        String @id @default(cuid())
+  productId String @map("product_id")
+  key       String // boyut, ağırlık, malzeme, dönem, imza
+  value     String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_attributes")
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  parentId  String?    @map("parent_id")
+  name      String
+  slug      String     @unique
+  depth     Int        @default(0)
+  sortOrder Int        @default(0) @map("sort_order")
+  imageUrl  String?    @map("image_url")
+  isActive  Boolean    @default(true) @map("is_active")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  products ProductTag[]
+
+  @@map("tags")
+}
+
+model ProductTag {
+  productId String @map("product_id")
+  tagId     String @map("tag_id")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@map("product_tags")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("favorites")
+}
+
+// ============================================================
+// TEKLİF (PEY) SİSTEMİ
+// ============================================================
+
+enum BidType {
+  MANUAL
+  PROXY
+  ABSENTEE
+  BUY_NOW
+}
+
+model Bid {
+  id               String   @id @default(cuid())
+  auctionId        String   @map("auction_id")
+  lotId            String?  @map("lot_id")
+  userId           String   @map("user_id")
+  amount           Decimal  @db.Decimal(18, 2)
+  type             BidType  @default(MANUAL)
+  maxProxyAmount   Decimal? @map("max_proxy_amount") @db.Decimal(18, 2)
+  ipAddress        String?  @map("ip_address")
+  deviceFingerprint String? @map("device_fingerprint")
+  userAgent        String?  @map("user_agent")
+  isSuspicious     Boolean  @default(false) @map("is_suspicious")
+  isWinning        Boolean  @default(false) @map("is_winning")
+  isRetracted      Boolean  @default(false) @map("is_retracted")
+  retractedReason  String?  @map("retracted_reason")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  auction Auction @relation(fields: [auctionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  order   Order?
+
+  @@index([auctionId, amount(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([auctionId, userId])
+  @@map("bids")
+}
+
+model BidIncrement {
+  id              String  @id @default(cuid())
+  auctionId       String  @map("auction_id")
+  priceFrom       Decimal @map("price_from") @db.Decimal(18, 2)
+  priceTo         Decimal @map("price_to") @db.Decimal(18, 2)
+  incrementAmount Decimal @map("increment_amount") @db.Decimal(18, 2)
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@map("bid_increments")
+}
+
+// ============================================================
+// SİPARİŞ VE ÖDEME
+// ============================================================
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  ESCROW
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique @map("order_number")
+  auctionId        String      @map("auction_id")
+  bidId            String      @unique @map("bid_id")
+  buyerId          String      @map("buyer_id")
+  sellerId         String      @map("seller_id")
+  hammerPrice      Decimal     @map("hammer_price") @db.Decimal(18, 2)
+  buyerCommission  Decimal     @map("buyer_commission") @db.Decimal(18, 2)
+  sellerCommission Decimal     @map("seller_commission") @db.Decimal(18, 2)
+  vatRate          Decimal     @default(0.20) @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount        Decimal     @map("vat_amount") @db.Decimal(18, 2)
+  totalAmount      Decimal     @map("total_amount") @db.Decimal(18, 2)
+  currency         String      @default("TRY")
+  status           OrderStatus @default(PENDING_PAYMENT)
+  notes            String?
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  auction   Auction   @relation(fields: [auctionId], references: [id])
+  bid       Bid       @relation(fields: [bidId], references: [id])
+  buyer     User      @relation("BuyerOrders", fields: [buyerId], references: [id])
+  seller    User      @relation("SellerOrders", fields: [sellerId], references: [id])
+  payments  Payment[]
+  invoices  Invoice[]
+  shipment  Shipment?
+  payout    SellerPayout?
+
+  @@index([buyerId, createdAt(sort: Desc)])
+  @@index([sellerId, createdAt(sort: Desc)])
+  @@map("orders")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String        @map("order_id")
+  method        PaymentMethod
+  providerRef   String?       @map("provider_ref") // iyzico payment id
+  amount        Decimal       @db.Decimal(18, 2)
+  currency      String        @default("TRY")
+  installments  Int           @default(1)
+  status        PaymentStatus @default(PENDING)
+  failureReason String?       @map("failure_reason")
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+enum InvoiceType {
+  E_INVOICE
+  E_ARCHIVE
+}
+
+model Invoice {
+  id            String      @id @default(cuid())
+  orderId       String      @map("order_id")
+  type          InvoiceType
+  invoiceNumber String      @unique @map("invoice_number")
+  gibUuid       String?     @map("gib_uuid") // GİB entegrasyon UUID
+  amount        Decimal     @db.Decimal(18, 2)
+  vatAmount     Decimal     @map("vat_amount") @db.Decimal(18, 2)
+  pdfUrl        String?     @map("pdf_url")
+  issuedAt      DateTime    @default(now()) @map("issued_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("invoices")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model SellerPayout {
+  id                String       @id @default(cuid())
+  orderId           String       @unique @map("order_id")
+  sellerId          String       @map("seller_id")
+  grossAmount       Decimal      @map("gross_amount") @db.Decimal(18, 2)
+  commissionAmount  Decimal      @map("commission_amount") @db.Decimal(18, 2)
+  netAmount         Decimal      @map("net_amount") @db.Decimal(18, 2)
+  currency          String       @default("TRY")
+  status            PayoutStatus @default(PENDING)
+  scheduledDate     DateTime?    @map("scheduled_date")
+  paidAt            DateTime?    @map("paid_at")
+  bankRef           String?      @map("bank_ref")
+  createdAt         DateTime     @default(now()) @map("created_at")
+
+  order  Order @relation(fields: [orderId], references: [id])
+  seller SellerProfile @relation(fields: [sellerId], references: [id])
+
+  @@map("seller_payouts")
+}
+
+// ============================================================
+// KARGO VE LOJİSTİK
+// ============================================================
+
+enum ShipmentStatus {
+  PREPARING
+  LABEL_CREATED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RETURNED
+}
+
+enum CarrierType {
+  UPS
+  WHITE_GLOVE
+  SELF_PICKUP
+  STORE_PICKUP
+}
+
+model Shipment {
+  id               String         @id @default(cuid())
+  orderId          String         @unique @map("order_id")
+  carrier          CarrierType
+  trackingNumber   String?        @map("tracking_number")
+  labelUrl         String?        @map("label_url")
+  weight           Decimal?       @db.Decimal(10, 2) // kg
+  dimensions       String?        // LxWxH cm
+  insuranceAmount  Decimal?       @map("insurance_amount") @db.Decimal(18, 2)
+  shippingCost     Decimal?       @map("shipping_cost") @db.Decimal(18, 2)
+  status           ShipmentStatus @default(PREPARING)
+  estimatedDelivery DateTime?     @map("estimated_delivery")
+  deliveredAt      DateTime?      @map("delivered_at")
+  deliveryPhotoUrl String?        @map("delivery_photo_url")
+  recipientName    String?        @map("recipient_name")
+  deliveryAddress  String?        @map("delivery_address")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("shipments")
+}
+
+// ============================================================
+// BİLDİRİM SİSTEMİ
+// ============================================================
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String              @map("user_id")
+  type      String              // bid_outbid, auction_won, auction_started, etc.
+  channel   NotificationChannel
+  title     String
+  body      String
+  dataJson  Json?               @map("data_json")
+  imageUrl  String?             @map("image_url")
+  actionUrl String?             @map("action_url")
+  isRead    Boolean             @default(false) @map("is_read")
+  sentAt    DateTime            @default(now()) @map("sent_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, sentAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id           String @id @default(cuid())
+  userId       String @map("user_id")
+  type         String // bid_outbid, auction_won, etc.
+  emailEnabled Boolean @default(true) @map("email_enabled")
+  smsEnabled   Boolean @default(false) @map("sms_enabled")
+  pushEnabled  Boolean @default(true) @map("push_enabled")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("notification_preferences")
+}
+
+// ============================================================
+// SATICI / MÜZAYEDE EVİ (MODÜL E)
+// ============================================================
+
+model SellerProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique @map("user_id")
+  companyName      String?  @map("company_name")
+  storeName        String   @map("store_name")
+  storeSlug        String   @unique @map("store_slug")
+  logoUrl          String?  @map("logo_url")
+  bannerUrl        String?  @map("banner_url")
+  description      String?
+  website          String?
+  socialMedia      Json?    @map("social_media") // { instagram, twitter, facebook }
+  commissionRate   Decimal? @map("commission_rate") @db.Decimal(5, 4)
+  performanceScore Float    @default(50.0) @map("performance_score")
+  isApproved       Boolean  @default(false) @map("is_approved")
+  approvedAt       DateTime? @map("approved_at")
+  bankIban         String?  @map("bank_iban")
+  bankName         String?  @map("bank_name")
+  taxId            String?  @map("tax_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user     User           @relation(fields: [userId], references: [id])
+  auctions Auction[]
+  payouts  SellerPayout[]
+
+  @@map("seller_profiles")
+}
+
+// ============================================================
+// SANATÇI VE SERGİ (MODÜL F)
+// ============================================================
+
+model Artist {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  biography   String?
+  photoUrl    String?  @map("photo_url")
+  birthYear   Int?     @map("birth_year")
+  deathYear   Int?     @map("death_year")
+  nationality String?
+  priceIndex  Float?   @map("price_index") // Sanatçı fiyat endeksi
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products    Product[]
+  exhibitions ExhibitionArtist[]
+
+  @@map("artists")
+}
+
+enum ExhibitionLayout {
+  GRID
+  SLIDER
+  MASONRY
+  THREE_D
+}
+
+model Exhibition {
+  id          String           @id @default(cuid())
+  title       String
+  slug        String           @unique
+  description String?
+  coverImage  String?          @map("cover_image")
+  layout      ExhibitionLayout @default(GRID)
+  startDate   DateTime         @map("start_date")
+  endDate     DateTime         @map("end_date")
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  products ExhibitionProduct[]
+  artists  ExhibitionArtist[]
+
+  @@map("exhibitions")
+}
+
+model ExhibitionProduct {
+  exhibitionId String @map("exhibition_id")
+  productId    String @map("product_id")
+  sortOrder    Int    @default(0) @map("sort_order")
+
+  exhibition Exhibition @relation(fields: [exhibitionId], references: [id], onDelete: Cascade)
+
+  @@id([exhibitionId, productId])
+  @@map("exhibition_products")
+}
+
+model ExhibitionArtist {
+  exhibitionId String @map("exhibition_id")
+  artistId     String @map("artist_id")
+
+  exhibition Exhibition @relation(fields: [exhibitionId], references: [id], onDelete: Cascade)
+  artist     Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([exhibitionId, artistId])
+  @@map("exhibition_artists")
+}
+
+// ============================================================
+// BLOCKCHAIN VE DOĞRULAMA (MODÜL D)
+// ============================================================
+
+model NftCertificate {
+  id              String   @id @default(cuid())
+  productId       String   @map("product_id")
+  tokenId         String   @map("token_id")
+  contractAddress String   @map("contract_address")
+  chain           String   @default("polygon")
+  metadataIpfsHash String  @map("metadata_ipfs_hash")
+  ownerWallet     String   @map("owner_wallet")
+  mintTxHash      String?  @map("mint_tx_hash")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("nft_certificates")
+}
+
+model ProvenanceRecord {
+  id        String   @id @default(cuid())
+  productId String   @map("product_id")
+  txHash    String?  @map("tx_hash")
+  eventType String   @map("event_type") // created, sold, transferred
+  fromWallet String? @map("from_wallet")
+  toWallet   String? @map("to_wallet")
+  price     Decimal? @db.Decimal(18, 2)
+  notes     String?
+  timestamp DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("provenance_records")
+}
+
+model FractionalToken {
+  id              String  @id @default(cuid())
+  productId       String  @map("product_id")
+  contractAddress String? @map("contract_address")
+  totalShares     Int     @map("total_shares")
+  pricePerShare   Decimal @map("price_per_share") @db.Decimal(18, 2)
+  availableShares Int     @map("available_shares")
+  currency        String  @default("TRY")
+  isActive        Boolean @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("fractional_tokens")
+}
+
+enum BadgeType {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+}
+
+model UserBadge {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  badgeType BadgeType @map("badge_type")
+  tokenId   String?   @map("token_id")
+  txHash    String?   @map("tx_hash")
+  earnedAt  DateTime  @default(now()) @map("earned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeType])
+  @@map("user_badges")
+}
+
+// ============================================================
+// CMS (İÇERİK YÖNETİMİ)
+// ============================================================
+
+model Page {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  contentHtml     String?  @map("content_html")
+  metaTitle       String?  @map("meta_title")
+  metaDescription String?  @map("meta_description")
+  ogImageUrl      String?  @map("og_image_url")
+  isPublished     Boolean  @default(false) @map("is_published")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String   @map("image_url")
+  mobileImageUrl String? @map("mobile_image_url")
+  linkUrl   String?  @map("link_url")
+  position  String   @default("homepage") // homepage, category, auction
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  startDate DateTime? @map("start_date")
+  endDate   DateTime? @map("end_date")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("banners")
+}
+
+model BlogPost {
+  id              String   @id @default(cuid())
+  title           String
+  slug            String   @unique
+  excerpt         String?
+  contentHtml     String   @map("content_html")
+  coverImageUrl   String?  @map("cover_image_url")
+  authorId        String   @map("author_id")
+  metaTitle       String?  @map("meta_title")
+  metaDescription String?  @map("meta_description")
+  isPublished     Boolean  @default(false) @map("is_published")
+  publishedAt     DateTime? @map("published_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("blog_posts")
+}
+
+model Faq {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  category  String?
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("faqs")
+}
+
+// ============================================================
+// PAZARLAMA (MODÜL I)
+// ============================================================
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  discountType   String    @map("discount_type") // percentage, fixed
+  discountValue  Decimal   @map("discount_value") @db.Decimal(18, 2)
+  minOrderAmount Decimal?  @map("min_order_amount") @db.Decimal(18, 2)
+  maxUses        Int?      @map("max_uses")
+  usedCount      Int       @default(0) @map("used_count")
+  expiresAt      DateTime? @map("expires_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("coupons")
+}
+
+model Referral {
+  id           String   @id @default(cuid())
+  referrerId   String   @map("referrer_id")
+  referredId   String?  @map("referred_id")
+  referralCode String   @unique @map("referral_code")
+  rewardGiven  Boolean  @default(false) @map("reward_given")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("referrals")
+}
+
+model LoyaltyPoints {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  points      Int      @default(0)
+  totalEarned Int      @default(0) @map("total_earned")
+  totalSpent  Int      @default(0) @map("total_spent")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId])
+  @@map("loyalty_points")
+}
+
+// ============================================================
+// SİSTEM LOGLARI VE DENETİM
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String   // user.login, auction.created, bid.placed, etc.
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// CANLANI MÜZYAYEDELERİ (MODÜL A)
+// ============================================================
+
+model LiveSession {
+  id          String   @id @default(cuid())
+  auctionId   String   @unique @map("auction_id")
+  streamKey   String   @unique @map("stream_key")
+  rtmpUrl     String?  @map("rtmp_url")
+  playbackUrl String?  @map("playback_url")
+  status      String   @default("idle") // idle, live, ended
+  viewerCount Int      @default(0) @map("viewer_count")
+  recordingUrl String? @map("recording_url")
+  startedAt   DateTime? @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("live_sessions")
+}
+
+model AbsenteeBid {
+  id        String   @id @default(cuid())
+  auctionId String   @map("auction_id")
+  lotId     String?  @map("lot_id")
+  userId    String   @map("user_id")
+  maxAmount Decimal  @map("max_amount") @db.Decimal(18, 2)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([auctionId, lotId, userId])
+  @@map("absentee_bids")
+}
