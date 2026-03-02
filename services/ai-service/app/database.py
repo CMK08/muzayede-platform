@@ -1,7 +1,7 @@
 """Database connection module using psycopg2 with connection pooling."""
 
-import os
 import logging
+import os
 from contextlib import contextmanager
 from typing import Optional
 
@@ -13,41 +13,48 @@ logger = logging.getLogger(__name__)
 _connection_pool: Optional[pool.ThreadedConnectionPool] = None
 
 
-def get_database_url() -> str:
-    """Get database URL from environment variables."""
-    url = os.getenv("DATABASE_URL", "")
-    if not url:
-        host = os.getenv("DB_HOST", "localhost")
-        port = os.getenv("DB_PORT", "5432")
-        name = os.getenv("DB_NAME", "muzayede")
-        user = os.getenv("DB_USER", "postgres")
-        password = os.getenv("DB_PASSWORD", "postgres")
-        url = f"postgresql://{user}:{password}@{host}:{port}/{name}"
-    return url
+# ---------------------------------------------------------------------------
+# Connection URL
+# ---------------------------------------------------------------------------
 
+def get_database_url() -> str:
+    """Build a PostgreSQL DSN from environment variables."""
+    url = os.getenv("DATABASE_URL", "")
+    if url:
+        return url
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "5432")
+    name = os.getenv("DB_NAME", "muzayede")
+    user = os.getenv("DB_USER", "postgres")
+    password = os.getenv("DB_PASSWORD", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+
+# ---------------------------------------------------------------------------
+# Pool lifecycle
+# ---------------------------------------------------------------------------
 
 def init_pool(min_connections: int = 2, max_connections: int = 10) -> None:
-    """Initialize the connection pool."""
+    """Initialise the threaded connection pool (idempotent)."""
     global _connection_pool
-
     if _connection_pool is not None:
         return
 
-    database_url = get_database_url()
+    dsn = get_database_url()
     try:
         _connection_pool = pool.ThreadedConnectionPool(
             minconn=min_connections,
             maxconn=max_connections,
-            dsn=database_url,
+            dsn=dsn,
         )
-        logger.info("Database connection pool initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database pool: {e}")
+        logger.info("Database connection pool initialised (min=%d, max=%d)", min_connections, max_connections)
+    except Exception as exc:
+        logger.error("Failed to initialise database pool: %s", exc)
         _connection_pool = None
 
 
 def close_pool() -> None:
-    """Close the connection pool."""
+    """Close every connection in the pool."""
     global _connection_pool
     if _connection_pool is not None:
         _connection_pool.closeall()
@@ -55,9 +62,13 @@ def close_pool() -> None:
         logger.info("Database connection pool closed")
 
 
+# ---------------------------------------------------------------------------
+# Connection context manager
+# ---------------------------------------------------------------------------
+
 @contextmanager
 def get_connection():
-    """Get a database connection from the pool."""
+    """Yield a connection from the pool; commit on success, rollback on error."""
     global _connection_pool
 
     if _connection_pool is None:
@@ -77,19 +88,22 @@ def get_connection():
         _connection_pool.putconn(conn)
 
 
+# ---------------------------------------------------------------------------
+# Convenience helpers
+# ---------------------------------------------------------------------------
+
 def execute_query(query: str, params: tuple = None, fetch: bool = True) -> list[dict]:
-    """Execute a query and return results as list of dicts."""
+    """Execute *query* and return every row as a ``dict``."""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute(query, params)
             if fetch:
-                rows = cur.fetchall()
-                return [dict(row) for row in rows]
+                return [dict(row) for row in cur.fetchall()]
             return []
 
 
 def execute_query_one(query: str, params: tuple = None) -> Optional[dict]:
-    """Execute a query and return a single result as dict."""
+    """Execute *query* and return the first row as a ``dict`` (or ``None``)."""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute(query, params)
@@ -98,7 +112,7 @@ def execute_query_one(query: str, params: tuple = None) -> Optional[dict]:
 
 
 def execute_update(query: str, params: tuple = None) -> int:
-    """Execute an update/insert/delete and return affected row count."""
+    """Execute an INSERT / UPDATE / DELETE and return affected row count."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(query, params)

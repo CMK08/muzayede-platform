@@ -1,13 +1,13 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { Heart, Eye, Gavel } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CountdownTimer } from "@/components/auction/countdown-timer";
+import { AuctionImage } from "@/components/auction/auction-image";
 import { formatCurrency } from "@/lib/utils";
 import type { AuctionItem } from "@/stores/auction-store";
 
@@ -46,8 +46,8 @@ export function AuctionCard({ auction, compact = false }: AuctionCardProps) {
       <Card hover className="group overflow-hidden">
         {/* Image */}
         <div className="relative aspect-[4/3] overflow-hidden">
-          <Image
-            src={auction.images[0] || "/images/placeholder-auction.jpg"}
+          <AuctionImage
+            src={auction.images?.[0]}
             alt={auction.title}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-110"

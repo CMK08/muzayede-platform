@@ -10,7 +10,7 @@ export interface User {
   firstName: string;
   lastName: string;
   avatar?: string;
-  role: "user" | "admin" | "moderator";
+  role: string;
   isVerified: boolean;
   createdAt: string;
 }
@@ -60,10 +60,11 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const { data } = await api.post(apiRoutes.auth.login, payload);
-          const { user, accessToken, refreshToken } = data.data;
+          const { user, accessToken, refreshToken } = data.data || data;
 
           localStorage.setItem("access_token", accessToken);
           localStorage.setItem("refresh_token", refreshToken);
+          document.cookie = `access_token=${accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
           updateSocketAuth(accessToken);
 
@@ -88,10 +89,11 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const { data } = await api.post(apiRoutes.auth.register, payload);
-          const { user, accessToken, refreshToken } = data.data;
+          const { user, accessToken, refreshToken } = data.data || data;
 
           localStorage.setItem("access_token", accessToken);
           localStorage.setItem("refresh_token", refreshToken);
+          document.cookie = `access_token=${accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
           updateSocketAuth(accessToken);
 
@@ -120,6 +122,7 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
+          document.cookie = "access_token=; path=/; max-age=0";
           disconnectSocket();
 
           set({

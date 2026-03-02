@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import Link from "next/link";
 import {
   Package,
   Truck,
@@ -10,10 +9,9 @@ import {
   CreditCard,
   FileText,
   RotateCcw,
-  Clock,
   Image as ImageIcon,
   MapPin,
-  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useUserOrders } from "@/hooks/use-dashboard";
 
 interface OrderItem {
   id: string;
@@ -44,79 +43,6 @@ interface OrderItem {
   sellerName: string;
 }
 
-const mockOrders: OrderItem[] = [
-  {
-    id: "ORD-2026-001",
-    auctionTitle: "Yagli Boya Tablo - Istanbul Bogazi",
-    image: null,
-    hammerPrice: 68000,
-    totalAmount: 74800,
-    status: "delivered",
-    paymentStatus: "paid",
-    trackingNumber: "TR123456789",
-    shippingCompany: "Yurtici Kargo",
-    orderDate: "2026-02-15T22:00:00Z",
-    deliveryDate: "2026-02-22T14:30:00Z",
-    sellerName: "Sanat Galerisi",
-  },
-  {
-    id: "ORD-2026-002",
-    auctionTitle: "Cartier Love Bileklik - Altin",
-    image: null,
-    hammerPrice: 78000,
-    totalAmount: 85800,
-    status: "shipped",
-    paymentStatus: "paid",
-    trackingNumber: "TR444555666",
-    shippingCompany: "Aras Kargo",
-    orderDate: "2026-02-19T11:30:00Z",
-    deliveryDate: null,
-    sellerName: "Mucevherat Dunyasi",
-  },
-  {
-    id: "ORD-2026-003",
-    auctionTitle: "Osmanli Donemi Altin Kupe Seti",
-    image: null,
-    hammerPrice: 42500,
-    totalAmount: 46750,
-    status: "pending_payment",
-    paymentStatus: "pending",
-    trackingNumber: null,
-    shippingCompany: null,
-    orderDate: "2026-02-25T15:30:00Z",
-    deliveryDate: null,
-    sellerName: "Antika Dunyasi",
-  },
-  {
-    id: "ORD-2026-004",
-    auctionTitle: "Patek Philippe Nautilus 5711/1A",
-    image: null,
-    hammerPrice: 2150000,
-    totalAmount: 2365000,
-    status: "pending_payment",
-    paymentStatus: "pending",
-    trackingNumber: null,
-    shippingCompany: null,
-    orderDate: "2026-02-26T09:00:00Z",
-    deliveryDate: null,
-    sellerName: "Prestige Saat",
-  },
-  {
-    id: "ORD-2026-005",
-    auctionTitle: "Mercedes-Benz 300SL Gullwing 1955",
-    image: null,
-    hammerPrice: 4250000,
-    totalAmount: 4675000,
-    status: "completed",
-    paymentStatus: "paid",
-    trackingNumber: "TR111222333",
-    shippingCompany: "Ozel Teslimat",
-    orderDate: "2026-02-10T22:00:00Z",
-    deliveryDate: "2026-02-18T10:00:00Z",
-    sellerName: "Klasik Oto Galeri",
-  },
-];
-
 const statusConfig: Record<
   string,
   { label: string; variant: "live" | "success" | "warning" | "default" | "secondary" | "destructive" }
@@ -131,7 +57,9 @@ const statusConfig: Record<
 
 export default function MyOrdersPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
+  void locale; // TODO: use for locale-aware links
   const [activeTab, setActiveTab] = useState("all");
   const [refundDialog, setRefundDialog] = useState<{
     open: boolean;
@@ -143,18 +71,34 @@ export default function MyOrdersPage() {
     order: OrderItem | null;
   }>({ open: false, order: null });
 
+  const { data: ordersData, isLoading } = useUserOrders(1, 50);
+  const allOrders: OrderItem[] = (ordersData?.data || []).map((o: Record<string, unknown>) => ({
+    id: o.id as string,
+    auctionTitle: (o.auctionTitle || o.title || "") as string,
+    image: (o.image || null) as string | null,
+    hammerPrice: (o.hammerPrice || o.price || 0) as number,
+    totalAmount: (o.totalAmount || o.total || 0) as number,
+    status: (o.status || "processing") as string,
+    paymentStatus: (o.paymentStatus || "pending") as string,
+    trackingNumber: (o.trackingNumber || null) as string | null,
+    shippingCompany: (o.shippingCompany || null) as string | null,
+    orderDate: (o.orderDate || o.createdAt || "") as string,
+    deliveryDate: (o.deliveryDate || null) as string | null,
+    sellerName: (o.sellerName || ((o.seller as Record<string, unknown>)?.name) || "") as string,
+  }));
+
   const filterOrders = (tab: string): OrderItem[] => {
     switch (tab) {
       case "pending":
-        return mockOrders.filter((o) => o.status === "pending_payment");
+        return allOrders.filter((o) => o.status === "pending_payment");
       case "shipped":
-        return mockOrders.filter((o) => o.status === "shipped");
+        return allOrders.filter((o) => o.status === "shipped");
       case "delivered":
-        return mockOrders.filter((o) => o.status === "delivered");
+        return allOrders.filter((o) => o.status === "delivered");
       case "completed":
-        return mockOrders.filter((o) => o.status === "completed");
+        return allOrders.filter((o) => o.status === "completed");
       default:
-        return mockOrders;
+        return allOrders;
     }
   };
 
@@ -173,24 +117,28 @@ export default function MyOrdersPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="all">Tumu ({mockOrders.length})</TabsTrigger>
+          <TabsTrigger value="all">Tumu ({allOrders.length})</TabsTrigger>
           <TabsTrigger value="pending">
-            Odeme Bekliyor ({mockOrders.filter((o) => o.status === "pending_payment").length})
+            Odeme Bekliyor ({allOrders.filter((o) => o.status === "pending_payment").length})
           </TabsTrigger>
           <TabsTrigger value="shipped">
-            Kargoda ({mockOrders.filter((o) => o.status === "shipped").length})
+            Kargoda ({allOrders.filter((o) => o.status === "shipped").length})
           </TabsTrigger>
           <TabsTrigger value="delivered">
-            Teslim ({mockOrders.filter((o) => o.status === "delivered").length})
+            Teslim ({allOrders.filter((o) => o.status === "delivered").length})
           </TabsTrigger>
           <TabsTrigger value="completed">
-            Tamamlanan ({mockOrders.filter((o) => o.status === "completed").length})
+            Tamamlanan ({allOrders.filter((o) => o.status === "completed").length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab}>
           <div className="space-y-3">
-            {orders.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+              </div>
+            ) : orders.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Package className="h-12 w-12 text-[var(--muted-foreground)]" />

@@ -27,7 +27,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "@muzayede/database": "workspace:*",
-    "@prisma/client": "^5.18.0"
+    "@prisma/client": "^6.3.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.0",

@@ -132,11 +132,11 @@ export class ProductsService {
     } else {
       where.isActive = true;
     }
-    if (query.priceMin !== undefined) {
-      where.estimateLow = { gte: new Prisma.Decimal(query.priceMin) };
+    if (query.priceMin !== undefined && !isNaN(Number(query.priceMin))) {
+      where.estimateLow = { gte: new Prisma.Decimal(Number(query.priceMin)) };
     }
-    if (query.priceMax !== undefined) {
-      where.estimateHigh = { lte: new Prisma.Decimal(query.priceMax) };
+    if (query.priceMax !== undefined && !isNaN(Number(query.priceMax))) {
+      where.estimateHigh = { lte: new Prisma.Decimal(Number(query.priceMax)) };
     }
     if (query.search) {
       where.title = { contains: query.search, mode: 'insensitive' };

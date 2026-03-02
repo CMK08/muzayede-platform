@@ -1,7 +1,10 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BidGateway } from '../websocket/bid.gateway';
-import { Prisma, BidType } from '@prisma/client';
+const BidType = {
+  PROXY: 'PROXY' as const,
+  MANUAL: 'MANUAL' as const,
+};
 
 @Injectable()
 export class ProxyBidService {
@@ -114,9 +117,9 @@ export class ProxyBidService {
       data: {
         auctionId,
         userId,
-        amount: new Prisma.Decimal(initialBidAmount),
+        amount: initialBidAmount,
         type: BidType.PROXY,
-        maxProxyAmount: new Prisma.Decimal(maxAmount),
+        maxProxyAmount: maxAmount,
         isWinning: true,
         isRetracted: false,
       },
@@ -126,7 +129,7 @@ export class ProxyBidService {
     await this.prisma.auction.update({
       where: { id: auctionId },
       data: {
-        currentPrice: new Prisma.Decimal(initialBidAmount),
+        currentPrice: initialBidAmount,
         bidCount: { increment: 1 },
       },
     });
@@ -189,7 +192,7 @@ export class ProxyBidService {
 
     // Filter to only proxy bids that can still outbid
     const eligibleProxies = proxyBids.filter(
-      (pb) => Number(pb.maxProxyAmount) >= currentAmount + minIncrement,
+      (pb: any) => Number(pb.maxProxyAmount) >= currentAmount + minIncrement,
     );
 
     if (eligibleProxies.length === 0) return;
@@ -302,7 +305,7 @@ export class ProxyBidService {
     amount: number,
     maxProxyAmount: number,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       // Mark current winning bid as not winning
       await tx.bid.updateMany({
         where: {
@@ -318,9 +321,9 @@ export class ProxyBidService {
         data: {
           auctionId,
           userId,
-          amount: new Prisma.Decimal(amount),
+          amount: amount,
           type: BidType.PROXY,
-          maxProxyAmount: new Prisma.Decimal(maxProxyAmount),
+          maxProxyAmount: maxProxyAmount,
           isWinning: true,
           isRetracted: false,
         },
@@ -330,7 +333,7 @@ export class ProxyBidService {
       await tx.auction.update({
         where: { id: auctionId },
         data: {
-          currentPrice: new Prisma.Decimal(amount),
+          currentPrice: amount,
           bidCount: { increment: 1 },
         },
       });

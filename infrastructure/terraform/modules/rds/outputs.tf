@@ -1,43 +1,64 @@
 ###############################################################################
-# RDS Module — Outputs
+# RDS Module - Outputs
 ###############################################################################
 
-output "endpoint" {
-  description = "RDS instance endpoint"
-  value       = aws_db_instance.this.endpoint
+output "db_instance_id" {
+  description = "ID of the RDS instance"
+  value       = aws_db_instance.main.id
 }
 
-output "address" {
-  description = "RDS instance hostname"
-  value       = aws_db_instance.this.address
+output "db_instance_arn" {
+  description = "ARN of the RDS instance"
+  value       = aws_db_instance.main.arn
 }
 
-output "port" {
-  description = "RDS instance port"
-  value       = aws_db_instance.this.port
+output "db_instance_endpoint" {
+  description = "Connection endpoint of the RDS instance"
+  value       = aws_db_instance.main.endpoint
 }
 
-output "database_name" {
+output "db_instance_address" {
+  description = "Hostname of the RDS instance"
+  value       = aws_db_instance.main.address
+}
+
+output "db_instance_port" {
+  description = "Port of the RDS instance"
+  value       = aws_db_instance.main.port
+}
+
+output "db_name" {
   description = "Name of the default database"
-  value       = aws_db_instance.this.db_name
+  value       = aws_db_instance.main.db_name
 }
 
-output "instance_id" {
-  description = "RDS instance ID"
-  value       = aws_db_instance.this.id
+output "db_master_username" {
+  description = "Master username"
+  value       = aws_db_instance.main.username
+  sensitive   = true
 }
 
-output "arn" {
-  description = "RDS instance ARN"
-  value       = aws_db_instance.this.arn
+output "db_master_password_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the master password"
+  value       = aws_db_instance.main.master_user_secret[0].secret_arn
 }
 
-output "security_group_id" {
-  description = "Security group ID for the RDS instance"
+output "db_security_group_id" {
+  description = "Security group ID of the RDS instance"
   value       = aws_security_group.rds.id
 }
 
-output "read_replica_endpoint" {
-  description = "Read replica endpoint (if created)"
+output "db_subnet_group_name" {
+  description = "Name of the DB subnet group"
+  value       = aws_db_subnet_group.main.name
+}
+
+output "db_replica_endpoint" {
+  description = "Connection endpoint of the read replica"
   value       = var.create_read_replica ? aws_db_instance.read_replica[0].endpoint : null
+}
+
+output "db_replica_address" {
+  description = "Hostname of the read replica"
+  value       = var.create_read_replica ? aws_db_instance.read_replica[0].address : null
 }

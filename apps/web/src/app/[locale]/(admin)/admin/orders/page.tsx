@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Eye,
-  RefreshCw,
   FileText,
   Download,
   DollarSign,
@@ -12,7 +11,6 @@ import {
   CheckCircle2,
   Package,
   Truck,
-  CreditCard,
   RotateCcw,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/admin/data-table";
@@ -30,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useAdminOrders } from "@/hooks/use-dashboard";
 
 interface Order {
   id: string;
@@ -193,7 +192,30 @@ export default function AdminOrdersPage() {
   }>({ open: false, order: null });
   const [refundReason, setRefundReason] = useState("");
 
-  const filteredData = mockOrders.filter((order) => {
+  const { data: ordersResponse } = useAdminOrders({
+    page: currentPage,
+    limit: pageSize,
+    search: search || "",
+    status: statusFilter || "",
+  });
+
+  const apiOrders: Order[] = (ordersResponse?.data || []).map((o: Record<string, unknown>) => ({
+    id: o.id as string,
+    auctionTitle: (o.auctionTitle || o.title || "") as string,
+    buyer: (o.buyer || o.buyerName || "") as string,
+    seller: (o.seller || o.sellerName || "") as string,
+    hammerPrice: (o.hammerPrice || o.price || 0) as number,
+    commission: (o.commission || 0) as number,
+    totalAmount: (o.totalAmount || o.total || 0) as number,
+    status: (o.status || "processing") as string,
+    paymentStatus: (o.paymentStatus || "pending") as string,
+    paymentMethod: (o.paymentMethod || "") as string,
+    orderDate: (o.orderDate || o.createdAt || "") as string,
+  }));
+
+  const allOrders: Order[] = apiOrders.length > 0 ? apiOrders : mockOrders;
+
+  const filteredData = allOrders.filter((order: Order) => {
     const matchesSearch =
       !search ||
       order.auctionTitle.toLowerCase().includes(search.toLowerCase()) ||
@@ -212,18 +234,18 @@ export default function AdminOrdersPage() {
     currentPage * pageSize
   );
 
-  const totalRevenue = mockOrders
-    .filter((o) => o.paymentStatus === "paid")
-    .reduce((sum, o) => sum + o.totalAmount, 0);
-  const pendingPayments = mockOrders
-    .filter((o) => o.paymentStatus === "pending")
-    .reduce((sum, o) => sum + o.totalAmount, 0);
-  const completedOrders = mockOrders.filter(
-    (o) => o.status === "completed" || o.status === "delivered"
+  const totalRevenue = allOrders
+    .filter((o: Order) => o.paymentStatus === "paid")
+    .reduce((sum: number, o: Order) => sum + o.totalAmount, 0);
+  const pendingPayments = allOrders
+    .filter((o: Order) => o.paymentStatus === "pending")
+    .reduce((sum: number, o: Order) => sum + o.totalAmount, 0);
+  const completedOrders = allOrders.filter(
+    (o: Order) => o.status === "completed" || o.status === "delivered"
   ).length;
-  const totalCommission = mockOrders
-    .filter((o) => o.paymentStatus === "paid")
-    .reduce((sum, o) => sum + o.commission, 0);
+  const totalCommission = allOrders
+    .filter((o: Order) => o.paymentStatus === "paid")
+    .reduce((sum: number, o: Order) => sum + o.commission, 0);
 
   const columns: Column<Order>[] = [
     {
@@ -355,7 +377,7 @@ export default function AdminOrdersPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Toplam Siparis"
-          value={String(mockOrders.length)}
+          value={String(allOrders.length)}
           change="+18%"
           changeType="positive"
           icon={Package}
@@ -365,7 +387,7 @@ export default function AdminOrdersPage() {
         <StatCard
           title="Bekleyen Odeme"
           value={formatCurrency(pendingPayments)}
-          change={`${mockOrders.filter((o) => o.paymentStatus === "pending").length} siparis`}
+          change={`${allOrders.filter((o: Order) => o.paymentStatus === "pending").length} siparis`}
           changeType="neutral"
           icon={Clock}
           iconColor="text-amber-500"

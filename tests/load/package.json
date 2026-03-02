@@ -1,0 +1,12 @@
+{
+  "name": "@muzayede/load-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:smoke": "k6 run --vus 1 --duration 10s tests/load/scenarios/smoke.js",
+    "test:load": "k6 run tests/load/scenarios/load.js",
+    "test:stress": "k6 run tests/load/scenarios/stress.js",
+    "test:spike": "k6 run tests/load/scenarios/spike.js",
+    "test:bidding": "k6 run tests/load/scenarios/bidding.js"
+  }
+}

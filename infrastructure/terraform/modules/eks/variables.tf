@@ -1,85 +1,78 @@
 ###############################################################################
-# EKS Module — Variables
+# EKS Module - Variables
 ###############################################################################
 
-variable "cluster_name" {
-  description = "Name of the EKS cluster"
+variable "project" {
+  description = "Project name used for resource naming"
   type        = string
 }
 
-variable "kubernetes_version" {
+variable "environment" {
+  description = "Environment name (dev, staging, production)"
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC"
+  type        = string
+}
+
+variable "private_subnet_ids" {
+  description = "IDs of private subnets for node groups"
+  type        = list(string)
+}
+
+variable "public_subnet_ids" {
+  description = "IDs of public subnets for load balancers"
+  type        = list(string)
+}
+
+variable "cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
   default     = "1.29"
 }
 
-variable "environment" {
-  description = "Deployment environment"
-  type        = string
-}
-
-variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "availability_zones" {
-  description = "List of availability zones"
-  type        = list(string)
-  default     = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
-}
-
-variable "private_subnets" {
-  description = "CIDR blocks for private subnets"
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-}
-
-variable "public_subnets" {
-  description = "CIDR blocks for public subnets"
-  type        = list(string)
-  default     = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-}
-
-variable "node_instance_type" {
-  description = "EC2 instance type for worker nodes"
-  type        = string
-  default     = "t3.xlarge"
-}
-
-variable "node_min_size" {
-  description = "Minimum number of worker nodes"
-  type        = number
-  default     = 3
-}
-
-variable "node_max_size" {
-  description = "Maximum number of worker nodes"
-  type        = number
-  default     = 10
-}
-
-variable "node_desired_size" {
-  description = "Desired number of worker nodes"
-  type        = number
-  default     = 3
-}
-
-variable "node_disk_size" {
-  description = "Disk size in GiB for worker nodes"
-  type        = number
-  default     = 100
-}
-
-variable "enable_fargate" {
-  description = "Enable Fargate profiles for system workloads"
+variable "cluster_endpoint_public_access" {
+  description = "Whether the EKS cluster API endpoint is publicly accessible"
   type        = bool
-  default     = false
+  default     = true
 }
 
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default     = {}
+variable "cluster_enabled_log_types" {
+  description = "List of control plane log types to enable"
+  type        = list(string)
+  default     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+}
+
+variable "cluster_log_retention_days" {
+  description = "Number of days to retain cluster logs"
+  type        = number
+  default     = 30
+}
+
+variable "node_groups" {
+  description = "Map of EKS managed node group configurations"
+  type = map(object({
+    instance_types = list(string)
+    desired_size   = number
+    min_size       = number
+    max_size       = number
+    capacity_type  = optional(string, "ON_DEMAND")
+    disk_size      = optional(number, 50)
+    labels         = optional(map(string), {})
+    taints = optional(list(object({
+      key    = string
+      value  = optional(string)
+      effect = string
+    })), [])
+  }))
+  default = {
+    general = {
+      instance_types = ["t3.medium"]
+      desired_size   = 2
+      min_size       = 1
+      max_size       = 4
+    }
+  }
 }

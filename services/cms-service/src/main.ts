@@ -25,10 +25,13 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Muzayede CMS Service')
-    .setDescription('Content management for pages, banners, FAQs, and announcements')
+    .setDescription('Content management for pages, banners, blog posts, and FAQs')
     .setVersion('1.0')
     .addBearerAuth()
-    .addTag('cms')
+    .addTag('pages', 'Static page management')
+    .addTag('banners', 'Banner/slider management')
+    .addTag('blog', 'Blog post management')
+    .addTag('faq', 'FAQ management')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

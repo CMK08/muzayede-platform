@@ -71,20 +71,41 @@ export class AuctionController {
     @Query('auctionHouseId') auctionHouseId?: string,
   ) {
     return this.auctionService.findAll({
-      page,
-      limit,
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
       status,
       type,
       categoryId,
       search,
       sort,
-      minPrice,
-      maxPrice,
+      minPrice: minPrice ? Number(minPrice) : undefined,
+      maxPrice: maxPrice ? Number(maxPrice) : undefined,
       startDateFrom,
       startDateTo,
       createdBy,
       auctionHouseId,
     });
+  }
+
+  @Get('featured')
+  @ApiOperation({ summary: 'Get featured/active auctions for homepage' })
+  @ApiResponse({ status: 200, description: 'Returns featured auctions' })
+  async getFeatured() {
+    return this.auctionService.getFeatured();
+  }
+
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Get upcoming auctions' })
+  @ApiResponse({ status: 200, description: 'Returns upcoming auctions' })
+  async getUpcoming() {
+    return this.auctionService.getUpcoming();
+  }
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Get auction categories with counts' })
+  @ApiResponse({ status: 200, description: 'Returns categories with auction counts' })
+  async getCategories() {
+    return this.auctionService.getCategories();
   }
 
   @Get(':id')

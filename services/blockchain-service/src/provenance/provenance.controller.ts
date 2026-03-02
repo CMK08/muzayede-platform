@@ -10,7 +10,7 @@ import { ProvenanceService } from './provenance.service';
 
 @ApiTags('provenance')
 @ApiBearerAuth()
-@Controller('provenance')
+@Controller('blockchain/provenance')
 export class ProvenanceController {
   constructor(private readonly provenanceService: ProvenanceService) {}
 
@@ -36,7 +36,7 @@ export class ProvenanceController {
     });
   }
 
-  @Get('chain/:productId')
+  @Get(':productId')
   @ApiOperation({ summary: 'Get full provenance chain for a product' })
   @ApiResponse({ status: 200, description: 'Returns provenance timeline' })
   async getProvenanceChain(@Param('productId') productId: string) {

@@ -78,14 +78,14 @@ export class ProductsController {
     @Query('sort') sort?: string,
   ) {
     return this.productsService.findAll({
-      page,
-      limit,
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
       categoryId,
       sellerId,
       condition,
       isActive,
-      priceMin,
-      priceMax,
+      priceMin: priceMin ? Number(priceMin) : undefined,
+      priceMax: priceMax ? Number(priceMax) : undefined,
       search,
       sort: sort as any,
     });

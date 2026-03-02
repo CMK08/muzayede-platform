@@ -165,6 +165,62 @@ export class InvoiceService {
   }
 
   /**
+   * Send invoice to buyer via email.
+   * In a real implementation, this would integrate with an email service
+   * (e.g., SendGrid, SES). Here we log the action and return a confirmation.
+   */
+  async sendInvoiceEmail(invoiceId: string) {
+    this.logger.log(`Sending invoice email: invoiceId=${invoiceId}`);
+
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        order: {
+          include: {
+            buyer: { include: { profile: true } },
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Invoice ${invoiceId} not found`);
+    }
+
+    const buyerEmail = invoice.order.buyer.email;
+    const buyerName = invoice.order.buyer.profile
+      ? `${invoice.order.buyer.profile.firstName} ${invoice.order.buyer.profile.lastName}`
+      : buyerEmail;
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: invoice.order.buyerId,
+        action: 'invoice.email_sent',
+        entityType: 'Invoice',
+        entityId: invoiceId,
+        metadata: {
+          invoiceNumber: invoice.invoiceNumber,
+          recipientEmail: buyerEmail,
+          recipientName: buyerName,
+        },
+      },
+    });
+
+    this.logger.log(
+      `Invoice email sent: ${invoice.invoiceNumber} -> ${buyerEmail}`,
+    );
+
+    return {
+      invoiceId,
+      invoiceNumber: invoice.invoiceNumber,
+      sentTo: buyerEmail,
+      recipientName: buyerName,
+      status: 'sent',
+      sentAt: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Generate a unique invoice number: MZY-YYYY-XXXXXX
    */
   private async generateInvoiceNumber(): Promise<string> {

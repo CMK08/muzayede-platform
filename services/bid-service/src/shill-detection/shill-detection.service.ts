@@ -156,7 +156,7 @@ export class ShillDetectionService {
       });
 
       const sellerIpSet = new Set(
-        sellerIps.map((b) => b.ipAddress).filter(Boolean),
+        sellerIps.map((b: any) => b.ipAddress).filter(Boolean),
       );
 
       const bidderBidsOnSameIps = await this.prisma.bid.count({
@@ -197,7 +197,7 @@ export class ShillDetectionService {
       select: { id: true },
     });
 
-    const sellerAuctionIds = sellerAuctions.map((a) => a.id);
+    const sellerAuctionIds = sellerAuctions.map((a: any) => a.id);
 
     if (sellerAuctionIds.length <= 1) return 0;
 

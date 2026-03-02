@@ -1,4 +1,5 @@
-export { AuctionType, AuctionTypeStrategy, BidContext, AuctionResult, BidValidationResult } from './auction-type.interface';
+export { AuctionType } from './auction-type.interface';
+export type { AuctionTypeStrategy, BidContext, AuctionResult, BidValidationResult } from './auction-type.interface';
 export { EnglishAuctionStrategy } from './english.strategy';
 export { DutchAuctionStrategy } from './dutch.strategy';
 export { SealedBidStrategy } from './sealed-bid.strategy';

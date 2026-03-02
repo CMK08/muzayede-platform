@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1a1f3a"/>
+      <stop offset="100%" stop-color="#0f1225"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4a843"/>
+      <stop offset="50%" stop-color="#f0d078"/>
+      <stop offset="100%" stop-color="#b8922e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="35%">
+      <stop offset="0%" stop-color="#d4a843" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#d4a843" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <!-- Subtle radial glow -->
+  <rect width="800" height="600" fill="url(#glow)"/>
+  <!-- Decorative border pattern -->
+  <rect x="30" y="30" width="740" height="540" rx="12" stroke="url(#gold)" stroke-width="1" stroke-opacity="0.2" fill="none"/>
+  <rect x="40" y="40" width="720" height="520" rx="8" stroke="url(#gold)" stroke-width="0.5" stroke-opacity="0.1" fill="none"/>
+  <!-- Gavel icon -->
+  <g transform="translate(400, 250)" fill="url(#gold)" opacity="0.7">
+    <!-- Gavel head -->
+    <rect x="-45" y="-65" width="90" height="35" rx="6" transform="rotate(-30)"/>
+    <!-- Gavel handle -->
+    <rect x="-6" y="-15" width="12" height="80" rx="4" transform="rotate(-30)"/>
+    <!-- Sound block -->
+    <rect x="-35" y="55" width="70" height="12" rx="4"/>
+    <rect x="-25" y="45" width="50" height="14" rx="3"/>
+  </g>
+  <!-- "MUZAYEDE" text -->
+  <text x="400" y="380" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="28" letter-spacing="8" fill="url(#gold)" opacity="0.6">MUZAYEDE</text>
+  <!-- Subtitle -->
+  <text x="400" y="415" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="3" fill="#8890aa" opacity="0.5">GORSEL YUKLENECEK</text>
+  <!-- Corner ornaments top-left -->
+  <path d="M50 80 L50 55 Q50 50 55 50 L80 50" stroke="url(#gold)" stroke-width="1.5" stroke-opacity="0.4" fill="none"/>
+  <!-- Corner ornaments top-right -->
+  <path d="M750 80 L750 55 Q750 50 745 50 L720 50" stroke="url(#gold)" stroke-width="1.5" stroke-opacity="0.4" fill="none"/>
+  <!-- Corner ornaments bottom-left -->
+  <path d="M50 520 L50 545 Q50 550 55 550 L80 550" stroke="url(#gold)" stroke-width="1.5" stroke-opacity="0.4" fill="none"/>
+  <!-- Corner ornaments bottom-right -->
+  <path d="M750 520 L750 545 Q750 550 745 550 L720 550" stroke="url(#gold)" stroke-width="1.5" stroke-opacity="0.4" fill="none"/>
+</svg>

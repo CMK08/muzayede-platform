@@ -36,6 +36,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useSellerDashboard } from "@/hooks/use-dashboard";
 
 const salesData = [
   { month: "Oca", sales: 125000 },
@@ -107,8 +108,13 @@ const statusConfig: Record<
 
 export default function SellerDashboardPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
   const [chartPeriod, setChartPeriod] = useState("monthly");
+  const { data: dashboardData } = useSellerDashboard();
+  // Use API data for stats when available
+  const stats = dashboardData?.stats;
+  void stats; // TODO: use API stats when backend is ready
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

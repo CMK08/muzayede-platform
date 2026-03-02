@@ -10,7 +10,7 @@ import { BadgesService } from './badges.service';
 
 @ApiTags('badges')
 @ApiBearerAuth()
-@Controller('badges')
+@Controller('blockchain/badges')
 export class BadgesController {
   constructor(private readonly badgesService: BadgesService) {}
 

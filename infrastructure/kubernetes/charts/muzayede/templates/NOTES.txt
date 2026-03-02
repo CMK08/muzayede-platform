@@ -1,0 +1,67 @@
+===========================================================================
+  Muzayede Auction Platform  -  {{ .Chart.Name }} {{ .Chart.Version }}
+===========================================================================
+
+Namespace : {{ include "muzayede.namespace" . }}
+Environment: {{ .Values.global.environment }}
+
+DEPLOYED SERVICES:
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+  - {{ $name | printf "%-25s" }} port={{ $svc.containerPort }}  replicas={{ $svc.replicaCount }}
+{{- end }}
+{{- end }}
+
+---------------------------------------------------------------------------
+INGRESS ENDPOINTS (requires nginx-ingress-controller + cert-manager):
+---------------------------------------------------------------------------
+{{- if .Values.global.tls.enabled }}
+  Web UI      : https://{{ .Values.global.domain }}
+  API Gateway : https://api.{{ .Values.global.domain }}
+  WebSocket   : wss://ws.{{ .Values.global.domain }}
+{{- else }}
+  Web UI      : http://{{ .Values.global.domain }}
+  API Gateway : http://api.{{ .Values.global.domain }}
+  WebSocket   : ws://ws.{{ .Values.global.domain }}
+{{- end }}
+
+---------------------------------------------------------------------------
+AUTOSCALING:
+---------------------------------------------------------------------------
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.enabled $svc.autoscaling.enabled }}
+  - {{ $name | printf "%-25s" }} min={{ $svc.autoscaling.minReplicas }} max={{ $svc.autoscaling.maxReplicas }} cpu={{ $svc.autoscaling.targetCPU }}% mem={{ $svc.autoscaling.targetMemory }}%
+{{- end }}
+{{- end }}
+
+---------------------------------------------------------------------------
+POD DISRUPTION BUDGETS:
+---------------------------------------------------------------------------
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.enabled (and $svc.pdb $svc.pdb.enabled) }}
+  - {{ $name | printf "%-25s" }} minAvailable={{ $svc.pdb.minAvailable }}
+{{- end }}
+{{- end }}
+
+---------------------------------------------------------------------------
+IMPORTANT - BEFORE FIRST DEPLOY:
+---------------------------------------------------------------------------
+  1. Replace placeholder secrets in muzayede-shared-secrets
+     (all values are currently set to "CHANGE_ME" in base64).
+     Consider using External Secrets Operator or Sealed Secrets.
+
+  2. Ensure infrastructure dependencies are running:
+     - PostgreSQL 16   ({{ .Values.infrastructure.postgresql.host }}:{{ .Values.infrastructure.postgresql.port }})
+     - Redis 7         ({{ .Values.infrastructure.redis.host }}:{{ .Values.infrastructure.redis.port }})
+     - Elasticsearch 8 ({{ .Values.infrastructure.elasticsearch.host }}:{{ .Values.infrastructure.elasticsearch.port }})
+     - Kafka           ({{ .Values.infrastructure.kafka.brokers }})
+
+  3. DNS records must point to the ingress controller:
+     - {{ .Values.global.domain }}
+     - api.{{ .Values.global.domain }}
+     - ws.{{ .Values.global.domain }}
+
+  4. Verify cert-manager ClusterIssuer "{{ .Values.global.tls.clusterIssuer }}"
+     is configured for TLS certificate issuance.
+
+===========================================================================

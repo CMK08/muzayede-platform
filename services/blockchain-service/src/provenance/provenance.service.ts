@@ -8,8 +8,10 @@ import { ethers } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
 const AUCTION_NFT_ABI = [
-  'function recordProvenance(uint256 tokenId, bytes32 provenanceHash) external',
+  'function recordProvenance(uint256 tokenId, address previousOwner, address newOwner, uint256 salePrice, string memory notes) external',
+  'function getProvenanceHistory(uint256 tokenId) external view returns (tuple(address previousOwner, address newOwner, uint256 salePrice, uint256 timestamp, string notes)[])',
   'function getProvenanceChain(uint256 tokenId) external view returns (bytes32[])',
+  'function getProvenanceCount(uint256 tokenId) external view returns (uint256)',
 ];
 
 @Injectable()
@@ -83,18 +85,24 @@ export class ProvenanceService {
 
     if (certificate && this.nftContract && this.wallet) {
       try {
-        const recordData = JSON.stringify({
-          productId,
-          eventType,
-          ...details,
-          timestamp: new Date().toISOString(),
-        });
-        const provenanceHash = ethers.keccak256(ethers.toUtf8Bytes(recordData));
+        const isOnChain =
+          !certificate.tokenId.startsWith('offchain_') &&
+          !certificate.tokenId.startsWith('pending_');
 
-        if (!certificate.tokenId.startsWith('offchain_') && !certificate.tokenId.startsWith('pending_')) {
+        if (isOnChain) {
+          const previousOwner = details.fromWallet || ethers.ZeroAddress;
+          const newOwner = details.toWallet || ethers.ZeroAddress;
+          const priceInWei = details.price
+            ? ethers.parseEther(details.price.toString())
+            : 0n;
+          const provenanceNotes = details.notes || `${eventType} event recorded`;
+
           const tx = await this.nftContract.recordProvenance(
             BigInt(certificate.tokenId),
-            provenanceHash,
+            previousOwner,
+            newOwner,
+            priceInWei,
+            provenanceNotes,
           );
           const receipt = await tx.wait();
           txHash = receipt.hash;
@@ -144,6 +152,7 @@ export class ProvenanceService {
       date: Date;
       txHash: string | null;
       notes: string | null;
+      onChainVerified: boolean;
     }>
   > {
     this.logger.log(`Getting provenance chain for product: ${productId}`);
@@ -169,6 +178,7 @@ export class ProvenanceService {
       date: record.timestamp,
       txHash: record.txHash,
       notes: record.notes,
+      onChainVerified: record.txHash !== null,
     }));
   }
 

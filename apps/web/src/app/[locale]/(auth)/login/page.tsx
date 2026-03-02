@@ -20,8 +20,6 @@ export default function LoginPage() {
   const t = useTranslations("auth");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || `/${locale}/dashboard`;
-
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const [loginMethod, setLoginMethod] = useState<"email" | "phone" | "otp">(
@@ -74,7 +72,19 @@ export default function LoginPage() {
           email: formData.email,
           password: formData.password,
         });
-        router.push(callbackUrl);
+        // Determine redirect after login succeeds (user is now set in store)
+        const explicitCallback = searchParams.get("callbackUrl");
+        if (explicitCallback) {
+          router.push(explicitCallback);
+        } else {
+          const { user: loggedInUser } = useAuthStore.getState();
+          const role = loggedInUser?.role;
+          if (role === "SUPER_ADMIN" || role === "ADMIN") {
+            router.push(`/${locale}/admin/dashboard`);
+          } else {
+            router.push(`/${locale}`);
+          }
+        }
       } catch {
         // Error is handled by the store
       }

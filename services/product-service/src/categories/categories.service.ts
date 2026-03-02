@@ -9,7 +9,7 @@ import { CreateCategoryDto } from '../common/dto/create-category.dto';
 import { UpdateCategoryDto } from '../common/dto/update-category.dto';
 import { turkishSlug } from '../common/utils/turkish-slug';
 
-interface CategoryTreeNode {
+export interface CategoryTreeNode {
   id: string;
   name: string;
   slug: string;

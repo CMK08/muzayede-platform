@@ -1,14 +1,15 @@
 ###############################################################################
-# Production Environment — Terraform Configuration
+# Production Environment - Muzayede Platform
+# High availability, multi-AZ, full redundancy, production-grade
 ###############################################################################
 
 terraform {
-  required_version = ">= 1.7.0"
+  required_version = ">= 1.5.0"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.40"
+      version = "~> 5.0"
     }
   }
 
@@ -16,8 +17,8 @@ terraform {
     bucket         = "muzayede-terraform-state"
     key            = "environments/production/terraform.tfstate"
     region         = "eu-central-1"
-    encrypt        = true
     dynamodb_table = "muzayede-terraform-locks"
+    encrypt        = true
   }
 }
 
@@ -26,249 +27,305 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "muzayede-platform"
+      Project     = "muzayede"
       Environment = "production"
       ManagedBy   = "terraform"
     }
   }
 }
 
-# -----------------------------------------------------------------------------
-# Local Variables
-# -----------------------------------------------------------------------------
 locals {
-  environment  = "production"
-  project_name = "muzayede"
-  common_tags = {
-    Project     = "muzayede-platform"
-    Environment = "production"
-    ManagedBy   = "terraform"
-  }
+  project     = "muzayede"
+  environment = "production"
+  region      = "eu-central-1"
 }
 
-# -----------------------------------------------------------------------------
-# EKS Cluster
-# -----------------------------------------------------------------------------
+###############################################################################
+# VPC
+###############################################################################
+
+module "vpc" {
+  source = "../../modules/vpc"
+
+  project            = local.project
+  environment        = local.environment
+  vpc_cidr           = "10.2.0.0/16"
+  enable_nat_gateway = true
+  single_nat_gateway = false  # One NAT per AZ for HA
+  enable_flow_logs   = true
+  flow_log_retention_days = 90
+}
+
+###############################################################################
+# EKS
+###############################################################################
+
 module "eks" {
   source = "../../modules/eks"
 
-  cluster_name       = "${local.project_name}-${local.environment}"
-  kubernetes_version = "1.29"
+  project            = local.project
   environment        = local.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  public_subnet_ids  = module.vpc.public_subnet_ids
+  cluster_version    = "1.29"
 
-  vpc_cidr        = "10.0.0.0/16"
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  cluster_endpoint_public_access = false  # Private only in production
+  cluster_log_retention_days     = 90
 
-  node_instance_type = "t3.xlarge"
-  node_min_size      = 3
-  node_max_size      = 10
-  node_desired_size  = 3
-  node_disk_size     = 100
-
-  enable_fargate = false
-
-  tags = local.common_tags
+  node_groups = {
+    general = {
+      instance_types = ["m6i.xlarge"]
+      desired_size   = 4
+      min_size       = 3
+      max_size       = 10
+      disk_size      = 100
+      labels = {
+        workload = "general"
+      }
+    }
+    compute = {
+      instance_types = ["c6i.2xlarge"]
+      desired_size   = 2
+      min_size       = 2
+      max_size       = 8
+      disk_size      = 100
+      labels = {
+        workload = "compute"
+      }
+    }
+    realtime = {
+      instance_types = ["m6i.xlarge"]
+      desired_size   = 2
+      min_size       = 2
+      max_size       = 6
+      disk_size      = 50
+      labels = {
+        workload = "realtime"
+      }
+      taints = [
+        {
+          key    = "dedicated"
+          value  = "realtime"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+  }
 }
 
-# -----------------------------------------------------------------------------
+###############################################################################
 # RDS PostgreSQL
-# -----------------------------------------------------------------------------
+###############################################################################
+
 module "rds" {
   source = "../../modules/rds"
 
-  identifier    = "${local.project_name}-${local.environment}"
-  environment   = local.environment
-  engine_version = "16.2"
-  instance_class = "db.r6g.xlarge"
+  project                   = local.project
+  environment               = local.environment
+  vpc_id                    = module.vpc.vpc_id
+  database_subnet_ids       = module.vpc.database_subnet_ids
+  allowed_security_group_id = module.eks.node_security_group_id
 
-  allocated_storage     = 100
-  max_allocated_storage = 500
+  engine_version        = "16.3"
+  instance_class        = "db.r6g.2xlarge"
+  allocated_storage     = 200
+  max_allocated_storage = 1000
   multi_az              = true
+  database_name         = "muzayede"
 
-  database_name   = "muzayede"
-  master_username = var.rds_master_username
-  master_password = var.rds_master_password
+  backup_retention_period               = 35
+  deletion_protection                   = true
+  skip_final_snapshot                   = false
+  performance_insights_enabled          = true
+  performance_insights_retention_period = 731  # 2 years
+  enhanced_monitoring_interval          = 30
 
-  vpc_id     = module.eks.vpc_id
-  subnet_ids = module.eks.private_subnet_ids
-  allowed_security_group_ids = [module.eks.node_security_group_id]
-
-  backup_retention_period = 30
-  create_read_replica     = true
-  replica_instance_class  = "db.r6g.large"
-
-  tags = local.common_tags
+  create_read_replica    = true
+  replica_instance_class = "db.r6g.xlarge"
 }
 
-# -----------------------------------------------------------------------------
+###############################################################################
 # ElastiCache Redis
-# -----------------------------------------------------------------------------
+###############################################################################
+
 module "elasticache" {
   source = "../../modules/elasticache"
 
-  cluster_id    = "${local.project_name}-${local.environment}"
-  environment   = local.environment
-  engine_version = "7.1"
-  node_type     = "cache.r6g.large"
+  project                   = local.project
+  environment               = local.environment
+  vpc_id                    = module.vpc.vpc_id
+  private_subnet_ids        = module.vpc.private_subnet_ids
+  allowed_security_group_id = module.eks.node_security_group_id
 
-  cluster_mode_enabled    = true
-  num_node_groups         = 3
-  replicas_per_node_group = 1
-  multi_az                = true
-
-  vpc_id     = module.eks.vpc_id
-  subnet_ids = module.eks.private_subnet_ids
-  allowed_security_group_ids = [module.eks.node_security_group_id]
-
-  transit_encryption_enabled = true
-  auth_token                 = var.redis_auth_token
-  snapshot_retention_limit   = 7
-
-  tags = local.common_tags
+  engine_version           = "7.1"
+  node_type                = "cache.r6g.xlarge"
+  num_cache_clusters       = 3  # One per AZ
+  multi_az_enabled         = true
+  snapshot_retention_limit = 7
 }
 
-# -----------------------------------------------------------------------------
+###############################################################################
 # S3 + CloudFront
-# -----------------------------------------------------------------------------
+###############################################################################
+
 module "s3_cloudfront" {
   source = "../../modules/s3-cloudfront"
 
-  project_name    = local.project_name
-  environment     = local.environment
-  certificate_arn = var.certificate_arn
-  domain_aliases  = ["cdn.muzayede.com", "static.muzayede.com"]
+  project                = local.project
+  environment            = local.environment
+  cloudfront_price_class = "PriceClass_200"  # Global except South America, Australia
+  domain_names           = var.cdn_domain_names
+  acm_certificate_arn    = var.acm_certificate_arn
+  spa_mode               = true
+  log_retention_days     = 365
 
-  allowed_origins = [
-    "https://muzayede.com",
-    "https://www.muzayede.com",
-    "https://api.muzayede.com"
-  ]
-
-  tags = local.common_tags
+  cors_allowed_origins = var.cors_allowed_origins
 }
 
-# -----------------------------------------------------------------------------
+###############################################################################
 # OpenSearch
-# -----------------------------------------------------------------------------
-module "opensearch" {
+###############################################################################
+
+module "elasticsearch" {
   source = "../../modules/elasticsearch"
 
-  domain_name = "${local.project_name}-${local.environment}"
-  environment = local.environment
+  project                   = local.project
+  environment               = local.environment
+  vpc_id                    = module.vpc.vpc_id
+  private_subnet_ids        = module.vpc.private_subnet_ids
+  allowed_security_group_id = module.eks.node_security_group_id
 
+  engine_version           = "OpenSearch_2.11"
+  instance_type            = "r6g.xlarge.search"
+  instance_count           = 3
   dedicated_master_enabled = true
-  dedicated_master_count   = 1
-  dedicated_master_type    = "m6g.large.search"
-  data_node_count          = 2
-  data_node_type           = "r6g.large.search"
-  ebs_volume_size          = 100
+  dedicated_master_type    = "r6g.large.search"
+  dedicated_master_count   = 3
+  ebs_volume_size          = 200
+  ebs_iops                 = 6000
+  ebs_throughput           = 250
+  master_user_password     = var.opensearch_master_password
+  log_retention_days       = 90
 
-  vpc_id     = module.eks.vpc_id
-  subnet_ids = module.eks.private_subnet_ids
-  allowed_security_group_ids = [module.eks.node_security_group_id]
-
-  fine_grained_access_enabled = true
-  master_user_name            = var.opensearch_master_user
-  master_user_password        = var.opensearch_master_password
-
-  create_service_linked_role = true
-  log_retention_days         = 90
-
-  tags = local.common_tags
+  create_service_linked_role = false  # Already created
 }
 
-# -----------------------------------------------------------------------------
+###############################################################################
 # MSK (Kafka)
-# -----------------------------------------------------------------------------
+###############################################################################
+
 module "kafka" {
   source = "../../modules/kafka"
 
-  cluster_name           = "${local.project_name}-${local.environment}"
-  environment            = local.environment
-  kafka_version          = "3.6.0"
-  number_of_broker_nodes = 3
-  broker_instance_type   = "kafka.m5.large"
-  ebs_volume_size        = 500
+  project                   = local.project
+  environment               = local.environment
+  vpc_id                    = module.vpc.vpc_id
+  private_subnet_ids        = module.vpc.private_subnet_ids
+  allowed_security_group_id = module.eks.node_security_group_id
 
-  vpc_id     = module.eks.vpc_id
-  subnet_ids = module.eks.private_subnet_ids
-  allowed_security_group_ids = [module.eks.node_security_group_id]
-
-  encryption_in_transit = "TLS"
-  log_retention_days    = 90
-
-  tags = local.common_tags
+  kafka_version          = "3.5.1"
+  number_of_broker_nodes = 6    # 2 per AZ for HA
+  broker_instance_type   = "kafka.m5.2xlarge"
+  broker_ebs_volume_size = 500
+  enhanced_monitoring    = "PER_TOPIC_PER_PARTITION"
+  log_retention_hours    = 336  # 14 days
+  s3_log_retention_days  = 365
 }
 
-# -----------------------------------------------------------------------------
-# Variables (secrets — pass via terraform.tfvars or CI/CD)
-# -----------------------------------------------------------------------------
-variable "rds_master_username" {
-  description = "RDS master username"
-  type        = string
-  sensitive   = true
-}
-
-variable "rds_master_password" {
-  description = "RDS master password"
-  type        = string
-  sensitive   = true
-}
-
-variable "redis_auth_token" {
-  description = "Redis auth token"
-  type        = string
-  sensitive   = true
-}
-
-variable "certificate_arn" {
-  description = "ACM certificate ARN for CloudFront (must be in us-east-1)"
-  type        = string
-}
-
-variable "opensearch_master_user" {
-  description = "OpenSearch master username"
-  type        = string
-  sensitive   = true
-  default     = "admin"
-}
+###############################################################################
+# Variables
+###############################################################################
 
 variable "opensearch_master_password" {
-  description = "OpenSearch master password"
+  description = "Master password for OpenSearch"
   type        = string
   sensitive   = true
 }
 
-# -----------------------------------------------------------------------------
+variable "cdn_domain_names" {
+  description = "Domain names for CloudFront distribution"
+  type        = list(string)
+  default     = []
+}
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for CloudFront HTTPS (us-east-1)"
+  type        = string
+  default     = null
+}
+
+variable "cors_allowed_origins" {
+  description = "CORS allowed origins for S3"
+  type        = list(string)
+  default     = ["https://muzayede.com", "https://www.muzayede.com"]
+}
+
+###############################################################################
 # Outputs
-# -----------------------------------------------------------------------------
+###############################################################################
+
+output "vpc_id" {
+  value = module.vpc.vpc_id
+}
+
 output "eks_cluster_endpoint" {
-  description = "EKS cluster endpoint"
-  value       = module.eks.cluster_endpoint
+  value     = module.eks.cluster_endpoint
+  sensitive = true
+}
+
+output "eks_cluster_name" {
+  value = module.eks.cluster_name
+}
+
+output "eks_oidc_provider_arn" {
+  value = module.eks.oidc_provider_arn
 }
 
 output "rds_endpoint" {
-  description = "RDS endpoint"
-  value       = module.rds.endpoint
+  value = module.rds.db_instance_endpoint
 }
 
-output "redis_endpoint" {
-  description = "ElastiCache Redis endpoint"
-  value       = module.elasticache.configuration_endpoint_address
+output "rds_replica_endpoint" {
+  value = module.rds.db_replica_endpoint
+}
+
+output "rds_password_secret_arn" {
+  value = module.rds.db_master_password_secret_arn
+}
+
+output "redis_primary_endpoint" {
+  value = module.elasticache.primary_endpoint_address
+}
+
+output "redis_reader_endpoint" {
+  value = module.elasticache.reader_endpoint_address
+}
+
+output "cloudfront_distribution_id" {
+  value = module.s3_cloudfront.cloudfront_distribution_id
 }
 
 output "cloudfront_domain" {
-  description = "CloudFront distribution domain"
-  value       = module.s3_cloudfront.cloudfront_domain_name
+  value = module.s3_cloudfront.cloudfront_domain_name
 }
 
 output "opensearch_endpoint" {
-  description = "OpenSearch endpoint"
-  value       = module.opensearch.endpoint
+  value = module.elasticsearch.domain_endpoint
 }
 
-output "kafka_bootstrap_brokers" {
-  description = "MSK bootstrap brokers (TLS)"
-  value       = module.kafka.bootstrap_brokers_tls
+output "opensearch_dashboard_endpoint" {
+  value = module.elasticsearch.dashboard_endpoint
+}
+
+output "kafka_bootstrap_brokers_tls" {
+  value = module.kafka.bootstrap_brokers_tls
+}
+
+output "kafka_bootstrap_brokers_sasl_iam" {
+  value = module.kafka.bootstrap_brokers_sasl_iam
+}
+
+output "kafka_zookeeper_connect" {
+  value = module.kafka.zookeeper_connect_string_tls
 }

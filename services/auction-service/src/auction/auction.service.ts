@@ -273,13 +273,13 @@ export class AuctionService {
     }
 
     // Price range filter
-    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+    if ((query.minPrice !== undefined && !isNaN(Number(query.minPrice))) || (query.maxPrice !== undefined && !isNaN(Number(query.maxPrice)))) {
       where.currentPrice = {};
-      if (query.minPrice !== undefined) {
-        where.currentPrice.gte = new Prisma.Decimal(query.minPrice);
+      if (query.minPrice !== undefined && !isNaN(Number(query.minPrice))) {
+        where.currentPrice.gte = new Prisma.Decimal(Number(query.minPrice));
       }
-      if (query.maxPrice !== undefined) {
-        where.currentPrice.lte = new Prisma.Decimal(query.maxPrice);
+      if (query.maxPrice !== undefined && !isNaN(Number(query.maxPrice))) {
+        where.currentPrice.lte = new Prisma.Decimal(Number(query.maxPrice));
       }
     }
 
@@ -344,6 +344,92 @@ export class AuctionService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // FEATURED (for homepage)
+  // ---------------------------------------------------------------------------
+
+  async getFeatured() {
+    const data = await this.prisma.auction.findMany({
+      where: {
+        status: { in: ['LIVE', 'PUBLISHED', 'PRE_BID'] as any },
+      },
+      orderBy: [{ bidCount: 'desc' }, { viewCount: 'desc' }],
+      take: 8,
+      include: {
+        _count: { select: { lots: true, bids: true } },
+        lots: {
+          take: 1,
+          include: {
+            product: {
+              include: {
+                media: { where: { isPrimary: true }, take: 1 },
+                category: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return { data };
+  }
+
+  // ---------------------------------------------------------------------------
+  // UPCOMING
+  // ---------------------------------------------------------------------------
+
+  async getUpcoming() {
+    const now = new Date();
+    const data = await this.prisma.auction.findMany({
+      where: {
+        status: { in: ['PUBLISHED', 'PRE_BID'] as any },
+        startDate: { gt: now },
+      },
+      orderBy: { startDate: 'asc' },
+      take: 6,
+      include: {
+        _count: { select: { lots: true, bids: true } },
+        lots: {
+          take: 1,
+          include: {
+            product: {
+              include: {
+                media: { where: { isPrimary: true }, take: 1 },
+                category: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return { data };
+  }
+
+  // ---------------------------------------------------------------------------
+  // CATEGORIES (with auction counts)
+  // ---------------------------------------------------------------------------
+
+  async getCategories() {
+    const categories = await this.prisma.category.findMany({
+      where: { parentId: null },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        _count: {
+          select: { products: true },
+        },
+      },
+    });
+
+    const data = categories.map((cat) => ({
+      id: cat.slug || cat.id,
+      name: cat.name,
+      count: cat._count.products,
+    }));
+
+    return { data };
   }
 
   // ---------------------------------------------------------------------------

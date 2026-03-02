@@ -7,6 +7,7 @@ import { AuctioneerService } from './auctioneer/auctioneer.service';
 import { ChatGateway } from './chat/chat.gateway';
 import { ChatService } from './chat-service/chat.service';
 import { AbsenteeService } from './absentee/absentee.service';
+import { WebRtcGateway } from './webrtc/webrtc.gateway';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AbsenteeService } from './absentee/absentee.service';
     ChatGateway,
     ChatService,
     AbsenteeService,
+    WebRtcGateway,
   ],
 })
 export class AppModule {}

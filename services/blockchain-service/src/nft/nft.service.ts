@@ -9,18 +9,55 @@ import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
+// ABI matching the enhanced AuctionNFT.sol contract with AccessControl, provenance, and auction lock
 const AUCTION_NFT_ABI = [
+  // Minting
   'function mint(address to, string memory uri, string memory auctionId) external returns (uint256)',
+  'function mintWithProduct(address to, string memory uri, string memory auctionId, string memory productId) external returns (uint256)',
+
+  // Auction lock
+  'function lockForAuction(uint256 tokenId, string memory auctionId) external',
+  'function unlockFromAuction(uint256 tokenId) external',
+  'function isLocked(uint256 tokenId) external view returns (bool)',
+  'function getLockedByAuction(uint256 tokenId) external view returns (string)',
+
+  // Transfers
   'function transferFrom(address from, address to, uint256 tokenId) external',
+  'function safeTransferFrom(address from, address to, uint256 tokenId) external',
+  'function transferWithProvenance(address from, address to, uint256 tokenId, uint256 salePrice, string memory notes) external',
+
+  // Provenance
+  'function recordProvenance(uint256 tokenId, address previousOwner, address newOwner, uint256 salePrice, string memory notes) external',
+  'function getProvenanceHistory(uint256 tokenId) external view returns (tuple(address previousOwner, address newOwner, uint256 salePrice, uint256 timestamp, string notes)[])',
+  'function getProvenanceChain(uint256 tokenId) external view returns (bytes32[])',
+  'function getProvenanceCount(uint256 tokenId) external view returns (uint256)',
+
+  // View functions
   'function ownerOf(uint256 tokenId) external view returns (address)',
   'function tokenURI(uint256 tokenId) external view returns (string)',
-  'function getProvenanceChain(uint256 tokenId) external view returns (bytes32[])',
-  'function recordProvenance(uint256 tokenId, bytes32 provenanceHash) external',
-  'event AuctionNFTMinted(uint256 indexed tokenId, address indexed owner, string auctionId, string metadataUri)',
+  'function getAuctionId(uint256 tokenId) external view returns (string)',
+  'function getProductId(uint256 tokenId) external view returns (string)',
+  'function totalMinted() external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function balanceOf(address owner) external view returns (uint256)',
+
+  // Access control
+  'function MINTER_ROLE() external view returns (bytes32)',
+  'function AUCTION_MANAGER_ROLE() external view returns (bytes32)',
+  'function hasRole(bytes32 role, address account) external view returns (bool)',
+  'function grantRole(bytes32 role, address account) external',
+  'function revokeRole(bytes32 role, address account) external',
+
+  // Events
+  'event CertificateMinted(uint256 indexed tokenId, address indexed owner, string auctionId, string metadataUri)',
+  'event ProvenanceRecorded(uint256 indexed tokenId, address indexed previousOwner, address indexed newOwner, uint256 salePrice, uint256 timestamp, string notes)',
+  'event OwnershipTransferred(uint256 indexed tokenId, address indexed from, address indexed to)',
+  'event TokenLocked(uint256 indexed tokenId, string auctionId)',
+  'event TokenUnlocked(uint256 indexed tokenId, string auctionId)',
   'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
 ];
 
-interface MintCertificateResult {
+export interface MintCertificateResult {
   certificate: {
     id: string;
     productId: string;
@@ -36,7 +73,15 @@ interface MintCertificateResult {
   explorerLink: string;
 }
 
-interface VerifyCertificateResult {
+export interface ProvenanceHistoryEntry {
+  previousOwner: string;
+  newOwner: string;
+  salePrice: string;
+  timestamp: number;
+  notes: string;
+}
+
+export interface VerifyCertificateResult {
   isValid: boolean;
   owner: string | null;
   metadata: Record<string, unknown> | null;
@@ -50,6 +95,27 @@ interface VerifyCertificateResult {
     txHash: string | null;
     timestamp: Date;
   }>;
+  onChainProvenance: ProvenanceHistoryEntry[];
+}
+
+export interface TokenDetailsResult {
+  tokenId: string;
+  owner: string | null;
+  tokenURI: string | null;
+  auctionId: string | null;
+  isLocked: boolean;
+  lockedByAuction: string | null;
+  provenanceCount: number;
+  certificate: {
+    id: string;
+    productId: string;
+    contractAddress: string;
+    chain: string;
+    metadataIpfsHash: string;
+    ownerWallet: string;
+    mintTxHash: string | null;
+    createdAt: Date;
+  } | null;
 }
 
 @Injectable()
@@ -85,6 +151,10 @@ export class NftService {
     }
   }
 
+  /**
+   * Mint an NFT certificate for a product. Uploads metadata to IPFS,
+   * calls AuctionNFT.mint() on-chain, and stores a record in the database.
+   */
   async mintCertificate(productId: string, ownerWallet: string): Promise<MintCertificateResult> {
     this.logger.log(`Minting NFT certificate for product: ${productId}, owner: ${ownerWallet}`);
 
@@ -138,14 +208,23 @@ export class NftService {
         const receipt = await tx.wait();
         mintTxHash = receipt.hash;
 
-        const mintEvent = receipt.logs.find(
-          (log: any) => log.fragment?.name === 'AuctionNFTMinted',
-        );
-        tokenId = mintEvent
-          ? mintEvent.args[0].toString()
-          : receipt.logs[0]?.topics[1]
-            ? parseInt(receipt.logs[0].topics[1], 16).toString()
-            : Date.now().toString();
+        // Parse CertificateMinted event from the receipt
+        const iface = new ethers.Interface(AUCTION_NFT_ABI);
+        let parsedTokenId: string | null = null;
+
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+            if (parsed && parsed.name === 'CertificateMinted') {
+              parsedTokenId = parsed.args[0].toString();
+              break;
+            }
+          } catch {
+            // Not our event, skip
+          }
+        }
+
+        tokenId = parsedTokenId || `${receipt.logs[0]?.topics[1] ? parseInt(receipt.logs[0].topics[1], 16) : Date.now()}`;
       } catch (error: any) {
         this.logger.error(`Blockchain mint failed: ${error.message}`);
         tokenId = `pending_${Date.now()}`;
@@ -201,7 +280,9 @@ export class NftService {
         ? 'https://polygonscan.com'
         : chain === 'mumbai'
           ? 'https://mumbai.polygonscan.com'
-          : 'https://etherscan.io';
+          : chain === 'amoy'
+            ? 'https://amoy.polygonscan.com'
+            : 'https://etherscan.io';
 
     return {
       certificate,
@@ -212,10 +293,178 @@ export class NftService {
     };
   }
 
+  /**
+   * Get NFT details by token ID, combining on-chain and database data.
+   */
+  async getTokenDetails(tokenId: string): Promise<TokenDetailsResult> {
+    this.logger.log(`Getting token details: ${tokenId}`);
+
+    let owner: string | null = null;
+    let tokenURIValue: string | null = null;
+    let auctionId: string | null = null;
+    let locked = false;
+    let lockedByAuction: string | null = null;
+    let provenanceCount = 0;
+
+    const isOnChain = !tokenId.startsWith('offchain_') && !tokenId.startsWith('pending_');
+
+    if (this.nftContract && isOnChain) {
+      try {
+        const tokenIdBn = BigInt(tokenId);
+        owner = await this.nftContract.ownerOf(tokenIdBn);
+        tokenURIValue = await this.nftContract.tokenURI(tokenIdBn);
+        auctionId = await this.nftContract.getAuctionId(tokenIdBn);
+        locked = await this.nftContract.isLocked(tokenIdBn);
+        if (locked) {
+          lockedByAuction = await this.nftContract.getLockedByAuction(tokenIdBn);
+        }
+        provenanceCount = Number(await this.nftContract.getProvenanceCount(tokenIdBn));
+      } catch (error: any) {
+        this.logger.warn(`On-chain query failed for token ${tokenId}: ${error.message}`);
+      }
+    }
+
+    const certificate = await this.prisma.nftCertificate.findFirst({
+      where: { tokenId },
+    });
+
+    if (!certificate && !owner) {
+      throw new NotFoundException(`Token with ID ${tokenId} not found`);
+    }
+
+    return {
+      tokenId,
+      owner: owner || certificate?.ownerWallet || null,
+      tokenURI: tokenURIValue,
+      auctionId,
+      isLocked: locked,
+      lockedByAuction,
+      provenanceCount,
+      certificate: certificate
+        ? {
+            id: certificate.id,
+            productId: certificate.productId,
+            contractAddress: certificate.contractAddress,
+            chain: certificate.chain,
+            metadataIpfsHash: certificate.metadataIpfsHash,
+            ownerWallet: certificate.ownerWallet,
+            mintTxHash: certificate.mintTxHash,
+            createdAt: certificate.createdAt,
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Get NFT certificate by product ID from the database.
+   */
+  async getCertificateByProduct(productId: string): Promise<{
+    certificate: any;
+    onChainData: {
+      owner: string | null;
+      tokenURI: string | null;
+      isLocked: boolean;
+      provenanceCount: number;
+    } | null;
+  }> {
+    this.logger.log(`Getting certificate for product: ${productId}`);
+
+    const certificate = await this.prisma.nftCertificate.findFirst({
+      where: { productId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!certificate) {
+      throw new NotFoundException(`No NFT certificate found for product ${productId}`);
+    }
+
+    let onChainData: {
+      owner: string | null;
+      tokenURI: string | null;
+      isLocked: boolean;
+      provenanceCount: number;
+    } | null = null;
+
+    const isOnChain =
+      !certificate.tokenId.startsWith('offchain_') &&
+      !certificate.tokenId.startsWith('pending_');
+
+    if (this.nftContract && isOnChain) {
+      try {
+        const tokenIdBn = BigInt(certificate.tokenId);
+        const owner = await this.nftContract.ownerOf(tokenIdBn);
+        const tokenURI = await this.nftContract.tokenURI(tokenIdBn);
+        const isLocked = await this.nftContract.isLocked(tokenIdBn);
+        const provenanceCount = Number(await this.nftContract.getProvenanceCount(tokenIdBn));
+
+        onChainData = { owner, tokenURI, isLocked, provenanceCount };
+      } catch (error: any) {
+        this.logger.warn(`On-chain query failed: ${error.message}`);
+      }
+    }
+
+    return { certificate, onChainData };
+  }
+
+  /**
+   * Lock a token for an active auction.
+   */
+  async lockForAuction(
+    tokenId: string,
+    auctionId: string,
+  ): Promise<{ success: boolean; txHash: string | null }> {
+    this.logger.log(`Locking token ${tokenId} for auction ${auctionId}`);
+
+    if (!this.nftContract || !this.wallet) {
+      this.logger.warn('No blockchain connection, lock operation skipped');
+      return { success: false, txHash: null };
+    }
+
+    try {
+      const tx = await this.nftContract.lockForAuction(BigInt(tokenId), auctionId);
+      const receipt = await tx.wait();
+      this.logger.log(`Token ${tokenId} locked for auction ${auctionId}, tx: ${receipt.hash}`);
+      return { success: true, txHash: receipt.hash };
+    } catch (error: any) {
+      this.logger.error(`Failed to lock token: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to lock token: ${error.message}`);
+    }
+  }
+
+  /**
+   * Unlock a token after auction ends.
+   */
+  async unlockFromAuction(
+    tokenId: string,
+  ): Promise<{ success: boolean; txHash: string | null }> {
+    this.logger.log(`Unlocking token ${tokenId} from auction`);
+
+    if (!this.nftContract || !this.wallet) {
+      this.logger.warn('No blockchain connection, unlock operation skipped');
+      return { success: false, txHash: null };
+    }
+
+    try {
+      const tx = await this.nftContract.unlockFromAuction(BigInt(tokenId));
+      const receipt = await tx.wait();
+      this.logger.log(`Token ${tokenId} unlocked, tx: ${receipt.hash}`);
+      return { success: true, txHash: receipt.hash };
+    } catch (error: any) {
+      this.logger.error(`Failed to unlock token: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to unlock token: ${error.message}`);
+    }
+  }
+
+  /**
+   * Transfer an NFT certificate with on-chain provenance tracking.
+   * Uses transferWithProvenance() for atomic transfer + provenance recording.
+   */
   async transferCertificate(
     certificateId: string,
     fromWallet: string,
     toWallet: string,
+    salePrice?: number,
+    notes?: string,
   ): Promise<{ certificate: any; txHash: string | null }> {
     this.logger.log(`Transferring certificate ${certificateId}: ${fromWallet} -> ${toWallet}`);
 
@@ -235,12 +484,23 @@ export class NftService {
 
     let txHash: string | null = null;
 
-    if (this.nftContract && this.wallet) {
+    if (
+      this.nftContract &&
+      this.wallet &&
+      !certificate.tokenId.startsWith('offchain_') &&
+      !certificate.tokenId.startsWith('pending_')
+    ) {
       try {
-        const tx = await this.nftContract.transferFrom(
+        const priceInWei = salePrice ? ethers.parseEther(salePrice.toString()) : 0n;
+        const transferNotes = notes || 'Ownership transferred via Muzayede platform';
+
+        // Use transferWithProvenance for atomic transfer + provenance recording
+        const tx = await this.nftContract.transferWithProvenance(
           fromWallet,
           toWallet,
           BigInt(certificate.tokenId),
+          priceInWei,
+          transferNotes,
         );
         const receipt = await tx.wait();
         txHash = receipt.hash;
@@ -251,7 +511,7 @@ export class NftService {
         );
       }
     } else {
-      this.logger.warn('No blockchain connection, performing off-chain transfer');
+      this.logger.warn('No blockchain connection or off-chain token, performing off-chain transfer');
     }
 
     const updatedCertificate = await this.prisma.nftCertificate.update({
@@ -265,8 +525,9 @@ export class NftService {
         eventType: 'transferred',
         fromWallet,
         toWallet,
+        price: salePrice || null,
         txHash,
-        notes: `NFT certificate transferred from ${fromWallet} to ${toWallet}`,
+        notes: notes || `NFT certificate transferred from ${fromWallet} to ${toWallet}`,
         timestamp: new Date(),
       },
     });
@@ -281,6 +542,7 @@ export class NftService {
           tokenId: certificate.tokenId,
           fromWallet,
           toWallet,
+          salePrice,
           txHash,
         },
       },
@@ -289,6 +551,10 @@ export class NftService {
     return { certificate: updatedCertificate, txHash };
   }
 
+  /**
+   * Verify an NFT certificate by checking on-chain ownership and
+   * retrieving both on-chain and off-chain provenance data.
+   */
   async verifyCertificate(certificateId: string): Promise<VerifyCertificateResult> {
     this.logger.log(`Verifying certificate: ${certificateId}`);
 
@@ -311,11 +577,26 @@ export class NftService {
 
     let onChainOwner: string | null = null;
     let isValid = true;
+    let onChainProvenance: ProvenanceHistoryEntry[] = [];
 
-    if (this.nftContract && !certificate.tokenId.startsWith('offchain_') && !certificate.tokenId.startsWith('pending_')) {
+    const isOnChain =
+      !certificate.tokenId.startsWith('offchain_') &&
+      !certificate.tokenId.startsWith('pending_');
+
+    if (this.nftContract && isOnChain) {
       try {
         onChainOwner = await this.nftContract.ownerOf(BigInt(certificate.tokenId));
-        isValid = onChainOwner.toLowerCase() === certificate.ownerWallet.toLowerCase();
+        isValid = onChainOwner!.toLowerCase() === certificate.ownerWallet.toLowerCase();
+
+        // Fetch on-chain provenance history
+        const history = await this.nftContract.getProvenanceHistory(BigInt(certificate.tokenId));
+        onChainProvenance = history.map((record: any) => ({
+          previousOwner: record.previousOwner,
+          newOwner: record.newOwner,
+          salePrice: ethers.formatEther(record.salePrice),
+          timestamp: Number(record.timestamp),
+          notes: record.notes,
+        }));
       } catch (error: any) {
         this.logger.warn(`On-chain verification failed: ${error.message}`);
         isValid = false;
@@ -354,44 +635,88 @@ export class NftService {
       owner: onChainOwner,
       metadata,
       provenanceChain,
+      onChainProvenance,
     };
   }
 
-  async getProvenanceChain(productId: string): Promise<
-    Array<{
-      event: string;
-      from: string | null;
-      to: string | null;
-      price: unknown;
-      date: Date;
-      txHash: string | null;
-      notes: string | null;
-    }>
-  > {
-    this.logger.log(`Getting provenance chain for product: ${productId}`);
-
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
-    });
-
-    if (!product) {
-      throw new NotFoundException(`Product with ID ${productId} not found`);
+  /**
+   * Get on-chain provenance history directly from the smart contract.
+   */
+  async getOnChainProvenance(tokenId: string): Promise<ProvenanceHistoryEntry[]> {
+    if (!this.nftContract) {
+      this.logger.warn('No blockchain connection available');
+      return [];
     }
 
-    const records = await this.prisma.provenanceRecord.findMany({
-      where: { productId },
-      orderBy: { timestamp: 'asc' },
-    });
+    try {
+      const history = await this.nftContract.getProvenanceHistory(BigInt(tokenId));
+      return history.map((record: any) => ({
+        previousOwner: record.previousOwner,
+        newOwner: record.newOwner,
+        salePrice: ethers.formatEther(record.salePrice),
+        timestamp: Number(record.timestamp),
+        notes: record.notes,
+      }));
+    } catch (error: any) {
+      this.logger.error(`Failed to fetch on-chain provenance: ${error.message}`);
+      return [];
+    }
+  }
 
-    return records.map((record) => ({
-      event: record.eventType,
-      from: record.fromWallet,
-      to: record.toWallet,
-      price: record.price,
-      date: record.timestamp,
-      txHash: record.txHash,
-      notes: record.notes,
-    }));
+  /**
+   * Record a provenance event on-chain for an existing NFT.
+   */
+  async recordOnChainProvenance(
+    tokenId: string,
+    previousOwner: string,
+    newOwner: string,
+    salePrice: number,
+    notes: string,
+  ): Promise<string | null> {
+    if (!this.nftContract || !this.wallet) {
+      this.logger.warn('No blockchain connection, skipping on-chain provenance');
+      return null;
+    }
+
+    try {
+      const priceInWei = ethers.parseEther(salePrice.toString());
+      const tx = await this.nftContract.recordProvenance(
+        BigInt(tokenId),
+        previousOwner,
+        newOwner,
+        priceInWei,
+        notes,
+      );
+      const receipt = await tx.wait();
+      this.logger.log(`On-chain provenance recorded, tx: ${receipt.hash}`);
+      return receipt.hash;
+    } catch (error: any) {
+      this.logger.error(`Failed to record on-chain provenance: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get contract statistics (total minted, total supply).
+   */
+  async getContractStats(): Promise<{ totalMinted: number; totalSupply: number } | null> {
+    if (!this.nftContract) {
+      return null;
+    }
+
+    try {
+      const [totalMinted, totalSupply] = await Promise.all([
+        this.nftContract.totalMinted(),
+        this.nftContract.totalSupply(),
+      ]);
+      return {
+        totalMinted: Number(totalMinted),
+        totalSupply: Number(totalSupply),
+      };
+    } catch (error: any) {
+      this.logger.error(`Failed to fetch contract stats: ${error.message}`);
+      return null;
+    }
   }
 
   private async uploadToIpfs(metadata: Record<string, unknown>): Promise<string> {

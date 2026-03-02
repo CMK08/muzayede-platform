@@ -7,40 +7,45 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface CreateShipmentDto {
+export interface AddressInfo {
+  name: string;
+  street: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+  country: string;
+  phone?: string;
+}
+
+export interface PackageInfo {
+  weight: number;
+  dimensions: { length: number; width: number; height: number };
+  description?: string;
+  declaredValue?: number;
+}
+
+export interface TrackingEvent {
+  status: string;
+  timestamp: string;
+  location: string;
+  description: string;
+}
+
+export interface ShipmentResponse {
+  id: string;
   orderId: string;
-  carrier: 'UPS' | 'WHITE_GLOVE' | 'SELF_PICKUP' | 'STORE_PICKUP';
+  carrier: string;
+  trackingNumber: string | null;
+  trackingUrl: string;
+  status: string;
+  shippingCost: number;
   weight: number;
   dimensions: string;
-  insuranceAmount?: number;
-  recipientName: string;
-  deliveryAddress: string;
-}
-
-interface ShippingRateDto {
-  fromCity: string;
-  toCity: string;
-  weight: number;
-  dimensions?: string;
-  declaredValue?: number;
-  whiteGlove?: boolean;
-}
-
-interface TrackingEvent {
-  status: string;
-  date: string;
-  location: string;
-  note: string;
-}
-
-interface ShippingRate {
-  carrier: string;
-  serviceName: string;
-  estimatedDays: number;
-  price: number;
-  insurancePrice: number;
-  currency: string;
-  whiteGlove: boolean;
+  insuranceAmount: number;
+  recipientName: string | null;
+  deliveryAddress: string | null;
+  estimatedDelivery: Date | null;
+  createdAt: Date;
 }
 
 @Injectable()
@@ -53,19 +58,18 @@ export class ShippingService {
   ) {}
 
   /**
-   * Create a shipment for a paid order.
-   * 1. Find Order by orderId, validate status is PAID
-   * 2. Calculate shipping cost via carrier rates
-   * 3. Create Shipment record
-   * 4. Generate tracking number
-   * 5. Update Order status to SHIPPED
-   * 6. Create AuditLog
+   * Create a shipment for an order.
    */
-  async createOrder(dto: CreateShipmentDto) {
-    this.logger.log(`Creating shipment for order: ${dto.orderId}`);
+  async createShipment(
+    orderId: string,
+    senderAddress: AddressInfo,
+    receiverAddress: AddressInfo,
+    packageInfo: PackageInfo,
+  ): Promise<ShipmentResponse> {
+    this.logger.log(`Creating shipment for order: ${orderId}`);
 
     const order = await this.prisma.order.findUnique({
-      where: { id: dto.orderId },
+      where: { id: orderId },
       include: {
         buyer: { include: { profile: true } },
         seller: { include: { profile: true } },
@@ -74,7 +78,7 @@ export class ShippingService {
     });
 
     if (!order) {
-      throw new NotFoundException(`Order ${dto.orderId} not found`);
+      throw new NotFoundException(`Order ${orderId} not found`);
     }
 
     if (order.status !== 'PAID') {
@@ -84,56 +88,48 @@ export class ShippingService {
     }
 
     const existingShipment = await this.prisma.shipment.findUnique({
-      where: { orderId: dto.orderId },
+      where: { orderId },
     });
 
     if (existingShipment) {
       throw new BadRequestException(
-        `Shipment already exists for order ${dto.orderId}`,
+        `Shipment already exists for order ${orderId}`,
       );
     }
 
+    const carrier = 'UPS';
     const shippingCost = this.calculateShippingCost(
-      dto.carrier,
-      dto.weight,
-      dto.carrier === 'WHITE_GLOVE',
+      carrier,
+      packageInfo.weight,
+      false,
     );
-
-    const trackingNumber = this.generateTrackingNumber(dto.carrier);
+    const trackingNumber = this.generateTrackingNumber(carrier);
+    const dimensionsStr = `${packageInfo.dimensions.length}x${packageInfo.dimensions.width}x${packageInfo.dimensions.height}`;
 
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(
-      estimatedDelivery.getDate() + this.getEstimatedDays(dto.carrier),
+      estimatedDelivery.getDate() + this.getEstimatedDays(carrier),
     );
-
-    const initialTrackingHistory: TrackingEvent[] = [
-      {
-        status: 'PREPARING',
-        date: new Date().toISOString(),
-        location: 'Depo',
-        note: 'Kargo siparisi olusturuldu',
-      },
-    ];
 
     const shipment = await this.prisma.$transaction(async (tx) => {
       const newShipment = await tx.shipment.create({
         data: {
-          orderId: dto.orderId,
-          carrier: dto.carrier as any,
+          orderId,
+          carrier: carrier as any,
           trackingNumber,
-          weight: dto.weight,
-          dimensions: dto.dimensions,
-          insuranceAmount: dto.insuranceAmount || 0,
+          weight: packageInfo.weight,
+          dimensions: dimensionsStr,
+          insuranceAmount: packageInfo.declaredValue || 0,
           shippingCost,
           status: 'PREPARING',
           estimatedDelivery,
-          recipientName: dto.recipientName,
-          deliveryAddress: dto.deliveryAddress,
+          recipientName: receiverAddress.name,
+          deliveryAddress: `${receiverAddress.street}, ${receiverAddress.city}, ${receiverAddress.postalCode}, ${receiverAddress.country}`,
         },
       });
 
       await tx.order.update({
-        where: { id: dto.orderId },
+        where: { id: orderId },
         data: { status: 'SHIPPED' },
       });
 
@@ -144,12 +140,14 @@ export class ShippingService {
           entityType: 'Shipment',
           entityId: newShipment.id,
           metadata: {
-            orderId: dto.orderId,
-            carrier: dto.carrier,
+            orderId,
+            carrier,
             trackingNumber,
             shippingCost,
-            weight: dto.weight,
-            dimensions: dto.dimensions,
+            weight: packageInfo.weight,
+            dimensions: dimensionsStr,
+            senderAddress: JSON.parse(JSON.stringify(senderAddress)),
+            receiverAddress: JSON.parse(JSON.stringify(receiverAddress)),
           },
         },
       });
@@ -157,7 +155,7 @@ export class ShippingService {
       return newShipment;
     });
 
-    const trackingUrl = this.getTrackingUrl(dto.carrier, trackingNumber);
+    const trackingUrl = this.getTrackingUrl(carrier, trackingNumber);
 
     this.logger.log(
       `Shipment created: ${shipment.id}, tracking=${trackingNumber}`,
@@ -172,7 +170,7 @@ export class ShippingService {
       status: shipment.status,
       shippingCost: Number(shipment.shippingCost),
       weight: Number(shipment.weight),
-      dimensions: shipment.dimensions,
+      dimensions: shipment.dimensions || dimensionsStr,
       insuranceAmount: Number(shipment.insuranceAmount),
       recipientName: shipment.recipientName,
       deliveryAddress: shipment.deliveryAddress,
@@ -182,165 +180,103 @@ export class ShippingService {
   }
 
   /**
-   * Get a shipment with its Order relation.
+   * Get current shipment status by shipment ID.
    */
-  async getOrder(id: string) {
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id },
-      include: {
-        order: {
-          include: {
-            buyer: { include: { profile: true } },
-            seller: { include: { profile: true } },
-            auction: true,
-          },
-        },
-      },
-    });
-
-    if (!shipment) {
-      throw new NotFoundException(`Shipment ${id} not found`);
-    }
-
-    return shipment;
-  }
-
-  /**
-   * Get shipments by user (buyer or seller role).
-   */
-  async getOrdersByUser(userId: string, role: 'buyer' | 'seller') {
-    const whereClause =
-      role === 'buyer'
-        ? { order: { buyerId: userId } }
-        : { order: { sellerId: userId } };
-
-    const shipments = await this.prisma.shipment.findMany({
-      where: whereClause,
-      include: {
-        order: {
-          include: {
-            buyer: { include: { profile: true } },
-            seller: { include: { profile: true } },
-            auction: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return shipments;
-  }
-
-  /**
-   * Track a shipment.
-   * Builds tracking timeline from status history.
-   */
-  async track(shipmentId: string) {
-    this.logger.log(`Tracking shipment: ${shipmentId}`);
-
+  async getShipmentStatus(shipmentId: string) {
     const shipment = await this.prisma.shipment.findUnique({
       where: { id: shipmentId },
-      include: { order: true },
+      include: {
+        order: {
+          include: {
+            buyer: { include: { profile: true } },
+            seller: { include: { profile: true } },
+            auction: true,
+          },
+        },
+      },
     });
 
     if (!shipment) {
       throw new NotFoundException(`Shipment ${shipmentId} not found`);
     }
 
-    const timeline = this.buildTrackingTimeline(shipment);
-
     return {
-      shipmentId: shipment.id,
+      id: shipment.id,
       orderId: shipment.orderId,
-      trackingNumber: shipment.trackingNumber,
       carrier: shipment.carrier,
-      currentStatus: shipment.status,
+      trackingNumber: shipment.trackingNumber,
+      status: shipment.status,
+      shippingCost: shipment.shippingCost ? Number(shipment.shippingCost) : null,
+      weight: shipment.weight ? Number(shipment.weight) : null,
+      dimensions: shipment.dimensions,
+      insuranceAmount: shipment.insuranceAmount
+        ? Number(shipment.insuranceAmount)
+        : null,
+      recipientName: shipment.recipientName,
+      deliveryAddress: shipment.deliveryAddress,
       estimatedDelivery: shipment.estimatedDelivery,
       deliveredAt: shipment.deliveredAt,
-      trackingUrl: this.getTrackingUrl(
-        shipment.carrier,
-        shipment.trackingNumber || '',
-      ),
-      timeline,
+      labelUrl: shipment.labelUrl,
+      deliveryPhotoUrl: shipment.deliveryPhotoUrl,
+      createdAt: shipment.createdAt,
+      updatedAt: shipment.updatedAt,
+      order: shipment.order,
     };
   }
 
   /**
-   * Get shipping rates for all carriers.
-   * Calculates rates for Aras, Yurtici, MNG, and PTT Kargo.
+   * Find shipment by order ID.
    */
-  async getRates(dto: ShippingRateDto): Promise<ShippingRate[]> {
-    this.logger.log(
-      `Getting rates: ${dto.fromCity} -> ${dto.toCity}, ${dto.weight}kg`,
-    );
+  async getShipmentByOrder(orderId: string) {
+    const shipment = await this.prisma.shipment.findUnique({
+      where: { orderId },
+      include: {
+        order: {
+          include: {
+            buyer: { include: { profile: true } },
+            seller: { include: { profile: true } },
+            auction: true,
+          },
+        },
+      },
+    });
 
-    const weight = dto.weight;
-    const declaredValue = dto.declaredValue || 0;
-    const insuranceRate = 0.01;
-    const insurancePrice = Math.round(declaredValue * insuranceRate * 100) / 100;
-
-    const carriers: ShippingRate[] = [
-      {
-        carrier: 'Aras Kargo',
-        serviceName: 'Standart Teslimat',
-        estimatedDays: 3,
-        price: Math.round((35 + weight * 8) * 100) / 100,
-        insurancePrice,
-        currency: 'TRY',
-        whiteGlove: false,
-      },
-      {
-        carrier: 'Yurtici Kargo',
-        serviceName: 'Standart Teslimat',
-        estimatedDays: 2,
-        price: Math.round((40 + weight * 7) * 100) / 100,
-        insurancePrice,
-        currency: 'TRY',
-        whiteGlove: false,
-      },
-      {
-        carrier: 'MNG Kargo',
-        serviceName: 'Express Teslimat',
-        estimatedDays: 2,
-        price: Math.round((32 + weight * 9) * 100) / 100,
-        insurancePrice,
-        currency: 'TRY',
-        whiteGlove: false,
-      },
-      {
-        carrier: 'PTT Kargo',
-        serviceName: 'Ekonomik Teslimat',
-        estimatedDays: 5,
-        price: Math.round((25 + weight * 6) * 100) / 100,
-        insurancePrice,
-        currency: 'TRY',
-        whiteGlove: false,
-      },
-    ];
-
-    if (dto.whiteGlove) {
-      const whiteGloveRates = carriers.map((carrier) => ({
-        ...carrier,
-        serviceName: `${carrier.serviceName} - Beyaz Eldiven`,
-        price: Math.round(carrier.price * 3 * 100) / 100,
-        estimatedDays: carrier.estimatedDays + 1,
-        whiteGlove: true,
-      }));
-      carriers.push(...whiteGloveRates);
+    if (!shipment) {
+      throw new NotFoundException(`No shipment found for order ${orderId}`);
     }
 
-    return carriers.sort((a, b) => a.price - b.price);
+    return {
+      id: shipment.id,
+      orderId: shipment.orderId,
+      carrier: shipment.carrier,
+      trackingNumber: shipment.trackingNumber,
+      status: shipment.status,
+      shippingCost: shipment.shippingCost ? Number(shipment.shippingCost) : null,
+      weight: shipment.weight ? Number(shipment.weight) : null,
+      dimensions: shipment.dimensions,
+      insuranceAmount: shipment.insuranceAmount
+        ? Number(shipment.insuranceAmount)
+        : null,
+      recipientName: shipment.recipientName,
+      deliveryAddress: shipment.deliveryAddress,
+      estimatedDelivery: shipment.estimatedDelivery,
+      deliveredAt: shipment.deliveredAt,
+      labelUrl: shipment.labelUrl,
+      createdAt: shipment.createdAt,
+      updatedAt: shipment.updatedAt,
+      order: shipment.order,
+    };
   }
 
   /**
-   * Update shipment status.
-   * Appends to tracking history, emits event.
+   * Update shipment status with optional location and description.
+   * Creates an audit log entry as a tracking event.
    */
-  async updateStatus(
+  async updateShipmentStatus(
     shipmentId: string,
     status: string,
     location?: string,
-    note?: string,
+    description?: string,
   ) {
     this.logger.log(`Updating shipment status: ${shipmentId} -> ${status}`);
 
@@ -351,6 +287,18 @@ export class ShippingService {
 
     if (!shipment) {
       throw new NotFoundException(`Shipment ${shipmentId} not found`);
+    }
+
+    if (shipment.status === 'DELIVERED') {
+      throw new BadRequestException(
+        'Cannot update status of a delivered shipment',
+      );
+    }
+
+    if (shipment.status === 'RETURNED') {
+      throw new BadRequestException(
+        'Cannot update status of a returned shipment',
+      );
     }
 
     const updateData: any = {
@@ -377,11 +325,18 @@ export class ShippingService {
             previousStatus: shipment.status,
             newStatus: status,
             location: location || null,
-            note: note || null,
+            description: description || null,
             timestamp: new Date().toISOString(),
           },
         },
       });
+
+      if (status === 'DELIVERED') {
+        await tx.order.update({
+          where: { id: shipment.orderId },
+          data: { status: 'DELIVERED' },
+        });
+      }
 
       return updated;
     });
@@ -395,25 +350,96 @@ export class ShippingService {
       trackingNumber: updatedShipment.trackingNumber,
       deliveredAt: updatedShipment.deliveredAt,
       updatedAt: updatedShipment.updatedAt,
+      event: {
+        status,
+        location: location || null,
+        description: description || null,
+        timestamp: new Date().toISOString(),
+      },
     };
   }
 
   /**
-   * Confirm delivery of a shipment.
-   * 1. Validate buyer is confirming
-   * 2. Set status DELIVERED, deliveryPhotoUrl
-   * 3. Update Order status to DELIVERED
-   * 4. Trigger escrow release (emit event)
-   * 5. Create AuditLog
+   * Get full tracking history for a shipment from audit logs.
    */
-  async confirmDelivery(
-    shipmentId: string,
-    userId: string,
-    photoUrl?: string,
-  ) {
-    this.logger.log(
-      `Delivery confirmation: shipment=${shipmentId}, userId=${userId}`,
-    );
+  async getTrackingEvents(shipmentId: string): Promise<TrackingEvent[]> {
+    this.logger.log(`Getting tracking events for shipment: ${shipmentId}`);
+
+    const shipment = await this.prisma.shipment.findUnique({
+      where: { id: shipmentId },
+    });
+
+    if (!shipment) {
+      throw new NotFoundException(`Shipment ${shipmentId} not found`);
+    }
+
+    const auditLogs = await this.prisma.auditLog.findMany({
+      where: {
+        entityType: 'Shipment',
+        entityId: shipmentId,
+        action: {
+          in: ['shipment.created', 'shipment.status_updated', 'shipment.delivery_confirmed'],
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const events: TrackingEvent[] = [];
+
+    for (const log of auditLogs) {
+      const metadata = log.metadata as any;
+
+      if (log.action === 'shipment.created') {
+        events.push({
+          status: 'PREPARING',
+          timestamp: log.createdAt.toISOString(),
+          location: 'Origin Warehouse',
+          description: 'Shipment order has been created',
+        });
+      } else if (log.action === 'shipment.status_updated') {
+        events.push({
+          status: metadata?.newStatus || 'UNKNOWN',
+          timestamp: metadata?.timestamp || log.createdAt.toISOString(),
+          location: metadata?.location || 'In Transit',
+          description: metadata?.description || `Status changed to ${metadata?.newStatus}`,
+        });
+      } else if (log.action === 'shipment.delivery_confirmed') {
+        events.push({
+          status: 'DELIVERED',
+          timestamp: metadata?.deliveredAt || log.createdAt.toISOString(),
+          location: 'Delivery Address',
+          description: 'Delivery confirmed by buyer',
+        });
+      }
+    }
+
+    // If no audit logs, build a minimal timeline from the shipment itself
+    if (events.length === 0) {
+      events.push({
+        status: 'PREPARING',
+        timestamp: shipment.createdAt.toISOString(),
+        location: 'Origin Warehouse',
+        description: 'Shipment order has been created',
+      });
+
+      if (shipment.status !== 'PREPARING') {
+        events.push({
+          status: shipment.status,
+          timestamp: shipment.updatedAt.toISOString(),
+          location: 'In Transit',
+          description: `Current status: ${shipment.status}`,
+        });
+      }
+    }
+
+    return events;
+  }
+
+  /**
+   * Cancel a shipment if it has not been picked up yet.
+   */
+  async cancelShipment(shipmentId: string) {
+    this.logger.log(`Cancelling shipment: ${shipmentId}`);
 
     const shipment = await this.prisma.shipment.findUnique({
       where: { id: shipmentId },
@@ -424,111 +450,61 @@ export class ShippingService {
       throw new NotFoundException(`Shipment ${shipmentId} not found`);
     }
 
-    if (shipment.order.buyerId !== userId) {
-      throw new BadRequestException('Only the buyer can confirm delivery');
+    const nonCancellableStatuses = [
+      'IN_TRANSIT',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+      'RETURNED',
+    ];
+
+    if (nonCancellableStatuses.includes(shipment.status)) {
+      throw new BadRequestException(
+        `Cannot cancel shipment in ${shipment.status} status. Only PREPARING, LABEL_CREATED, or PICKED_UP shipments can be cancelled.`,
+      );
     }
 
-    if (shipment.status === 'DELIVERED') {
-      throw new BadRequestException('Delivery already confirmed');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.shipment.update({
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.shipment.update({
         where: { id: shipmentId },
-        data: {
-          status: 'DELIVERED',
-          deliveredAt: new Date(),
-          deliveryPhotoUrl: photoUrl || null,
-        },
+        data: { status: 'RETURNED' as any },
       });
 
       await tx.order.update({
         where: { id: shipment.orderId },
-        data: { status: 'DELIVERED' },
+        data: { status: 'PAID' },
       });
 
       await tx.auditLog.create({
         data: {
-          userId,
-          action: 'shipment.delivery_confirmed',
+          action: 'shipment.cancelled',
           entityType: 'Shipment',
           entityId: shipmentId,
           metadata: {
             orderId: shipment.orderId,
-            confirmedBy: userId,
-            photoUrl: photoUrl || null,
-            deliveredAt: new Date().toISOString(),
+            previousStatus: shipment.status,
+            cancelledAt: new Date().toISOString(),
           },
         },
       });
+
+      return updated;
     });
 
-    this.logger.log(
-      `Delivery confirmed for shipment ${shipmentId}, order ${shipment.orderId}`,
-    );
+    this.logger.log(`Shipment ${shipmentId} cancelled`);
 
     return {
-      shipmentId,
-      orderId: shipment.orderId,
-      status: 'DELIVERED',
-      deliveredAt: new Date(),
-      message: 'Teslimat basariyla onaylandi. Emanet fonlari serbest birakilacak.',
+      id: result.id,
+      orderId: result.orderId,
+      status: result.status,
+      message: 'Shipment has been cancelled successfully',
+      cancelledAt: new Date().toISOString(),
     };
-  }
-
-  /**
-   * Build tracking timeline from audit logs for this shipment.
-   */
-  private buildTrackingTimeline(shipment: any): TrackingEvent[] {
-    const timeline: TrackingEvent[] = [
-      {
-        status: 'PREPARING',
-        date: shipment.createdAt.toISOString(),
-        location: 'Depo',
-        note: 'Kargo siparisi olusturuldu',
-      },
-    ];
-
-    const statusOrder = [
-      'LABEL_CREATED',
-      'PICKED_UP',
-      'IN_TRANSIT',
-      'OUT_FOR_DELIVERY',
-      'DELIVERED',
-    ];
-
-    const currentIndex = statusOrder.indexOf(shipment.status);
-    const statusNotes: Record<string, string> = {
-      LABEL_CREATED: 'Kargo etiketi olusturuldu',
-      PICKED_UP: 'Kargo teslim alindi',
-      IN_TRANSIT: 'Kargo yolda',
-      OUT_FOR_DELIVERY: 'Dagitima cikarildi',
-      DELIVERED: 'Teslim edildi',
-    };
-
-    for (let i = 0; i <= currentIndex; i++) {
-      const s = statusOrder[i];
-      const eventDate = new Date(shipment.createdAt);
-      eventDate.setHours(eventDate.getHours() + (i + 1) * 12);
-
-      timeline.push({
-        status: s,
-        date:
-          s === 'DELIVERED' && shipment.deliveredAt
-            ? shipment.deliveredAt.toISOString()
-            : eventDate.toISOString(),
-        location: s === 'DELIVERED' ? 'Teslimat Adresi' : 'Transfer Merkezi',
-        note: statusNotes[s] || s,
-      });
-    }
-
-    return timeline;
   }
 
   /**
    * Calculate shipping cost for a carrier.
    */
-  private calculateShippingCost(
+  calculateShippingCost(
     carrier: string,
     weight: number,
     whiteGlove: boolean,
@@ -538,6 +514,9 @@ export class ShippingService {
     switch (carrier) {
       case 'UPS':
         baseCost = 40 + weight * 7;
+        break;
+      case 'DHL':
+        baseCost = 45 + weight * 8;
         break;
       case 'WHITE_GLOVE':
         baseCost = (40 + weight * 7) * 3;
@@ -562,9 +541,10 @@ export class ShippingService {
   /**
    * Generate a tracking number with carrier prefix.
    */
-  private generateTrackingNumber(carrier: string): string {
+  generateTrackingNumber(carrier: string): string {
     const prefixes: Record<string, string> = {
       UPS: '1Z',
+      DHL: 'DHL',
       WHITE_GLOVE: 'WG',
       SELF_PICKUP: 'SP',
       STORE_PICKUP: 'ST',
@@ -581,10 +561,12 @@ export class ShippingService {
   /**
    * Get estimated delivery days for a carrier.
    */
-  private getEstimatedDays(carrier: string): number {
+  getEstimatedDays(carrier: string): number {
     switch (carrier) {
       case 'UPS':
         return 3;
+      case 'DHL':
+        return 4;
       case 'WHITE_GLOVE':
         return 5;
       case 'SELF_PICKUP':
@@ -599,9 +581,10 @@ export class ShippingService {
   /**
    * Get carrier tracking URL.
    */
-  private getTrackingUrl(carrier: string, trackingNumber: string): string {
+  getTrackingUrl(carrier: string, trackingNumber: string): string {
     const urls: Record<string, string> = {
       UPS: `https://www.ups.com/track?tracknum=${trackingNumber}`,
+      DHL: `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNumber}`,
       WHITE_GLOVE: `https://www.muzayede.com/kargo/takip/${trackingNumber}`,
       SELF_PICKUP: '',
       STORE_PICKUP: '',

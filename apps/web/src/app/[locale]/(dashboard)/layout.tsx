@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   LayoutDashboard,
-  Gavel,
   Heart,
   MessageSquare,
   CreditCard,

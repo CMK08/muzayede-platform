@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
   User,
@@ -13,6 +13,7 @@ import {
   Bell,
   Link2,
   Save,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,17 +22,23 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useProfile, useUpdateProfile } from "@/hooks/use-dashboard";
+import { useAuthStore } from "@/stores/auth-store";
 
 export default function ProfilePage() {
   const t = useTranslations("common");
-  const [saving, setSaving] = useState(false);
+  void t; // TODO: replace hardcoded strings with t() calls
+  const { user } = useAuthStore();
+  const { data: profileData, isLoading } = useProfile();
+  const updateProfileMutation = useUpdateProfile();
+
   const [profile, setProfile] = useState({
-    firstName: "Ahmet",
-    lastName: "Yilmaz",
-    email: "ahmet.yilmaz@email.com",
-    phone: "+90 532 123 4567",
-    address: "Besiktas Mah. Sehit Asim Cad. No:15/A",
-    city: "Istanbul",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
     country: "Turkiye",
     avatar: null as string | null,
   });
@@ -42,7 +49,7 @@ export default function ProfilePage() {
   });
   const [twoFa, setTwoFa] = useState(false);
   const [oauthAccounts] = useState([
-    { provider: "Google", email: "ahmet@gmail.com", connected: true },
+    { provider: "Google", email: "", connected: false },
     { provider: "Apple", email: "", connected: false },
     { provider: "Facebook", email: "", connected: false },
   ]);
@@ -55,10 +62,68 @@ export default function ProfilePage() {
     pushNotifications: true,
   });
 
-  const handleSave = () => {
-    setSaving(true);
-    setTimeout(() => setSaving(false), 1500);
+  // Sync profile data from API
+  useEffect(() => {
+    if (profileData) {
+      setProfile({
+        firstName: profileData.firstName || "",
+        lastName: profileData.lastName || "",
+        email: profileData.email || "",
+        phone: profileData.phone || "",
+        address: profileData.address || "",
+        city: profileData.city || "",
+        country: profileData.country || "Turkiye",
+        avatar: profileData.avatar || null,
+      });
+      if (profileData.twoFactorEnabled !== undefined) {
+        setTwoFa(profileData.twoFactorEnabled);
+      }
+      if (profileData.notificationPreferences) {
+        setNotifPrefs((prev) => ({
+          ...prev,
+          ...profileData.notificationPreferences,
+        }));
+      }
+      if (profileData.connectedAccounts) {
+        // Update connected accounts from API if available
+      }
+    } else if (user) {
+      setProfile((prev) => ({
+        ...prev,
+        firstName: user.firstName || prev.firstName,
+        lastName: user.lastName || prev.lastName,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone,
+        avatar: user.avatar || prev.avatar,
+      }));
+    }
+  }, [profileData, user]);
+
+  const handleSave = async () => {
+    try {
+      await updateProfileMutation.mutateAsync({
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        phone: profile.phone,
+        address: profile.address,
+        city: profile.city,
+        country: profile.country,
+        notificationPreferences: notifPrefs,
+      });
+    } catch {
+      // Error handled by mutation
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -70,7 +135,7 @@ export default function ProfilePage() {
             Kisisel bilgilerinizi ve tercihlerinizi duzenleyin
           </p>
         </div>
-        <Button onClick={handleSave} loading={saving}>
+        <Button onClick={handleSave} loading={updateProfileMutation.isPending}>
           <Save className="mr-2 h-4 w-4" />
           Kaydet
         </Button>
@@ -141,6 +206,7 @@ export default function ProfilePage() {
                 setProfile({ ...profile, email: e.target.value })
               }
               icon={<Mail className="h-4 w-4" />}
+              disabled
             />
             <Input
               label="Telefon"

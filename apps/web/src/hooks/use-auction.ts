@@ -23,12 +23,89 @@ interface AuctionListResponse {
   };
 }
 
+// ---------------------------------------------------------------------------
+// API → Frontend veri dönüştürücü
+// Backend'den gelen alan adları (endDate, startPrice, bidCount, vb.)
+// Frontend AuctionItem tipine (endTime, startingPrice, totalBids, vb.) çevrilir.
+// ---------------------------------------------------------------------------
+function mapApiStatus(status: string): AuctionItem["status"] {
+  switch (status) {
+    case "LIVE":
+      return "active";
+    case "PRE_BID":
+    case "PUBLISHED":
+      return "upcoming";
+    case "COMPLETED":
+      return "ended";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      return "upcoming";
+  }
+}
+
+function mapApiAuction(raw: Record<string, unknown>): AuctionItem {
+  const lots = (raw.lots as Record<string, unknown>[]) || [];
+  const firstLot = lots[0] as Record<string, unknown> | undefined;
+  const product = firstLot?.product as Record<string, unknown> | undefined;
+  const media = (product?.media as Record<string, unknown>[]) || [];
+  const category = product?.category as Record<string, unknown> | undefined;
+
+  // Collect images: cover image + product media
+  const images: string[] = [];
+  if (raw.coverImageUrl) images.push(raw.coverImageUrl as string);
+  for (const m of media) {
+    if (m.url) images.push(m.url as string);
+  }
+  // No fallback push here; the AuctionImage component handles missing images
+  // gracefully with an inline placeholder UI.
+
+  const status = mapApiStatus(raw.status as string);
+
+  // Determine if ending soon (< 24h remaining and LIVE)
+  const endDate = raw.endDate as string | undefined;
+  const finalStatus =
+    status === "active" && endDate
+      ? new Date(endDate).getTime() - Date.now() < 24 * 60 * 60 * 1000
+        ? "ending_soon"
+        : "active"
+      : status;
+
+  const count = raw._count as Record<string, number> | undefined;
+
+  return {
+    id: raw.id as string,
+    title: raw.title as string,
+    description: (raw.description as string) || "",
+    images,
+    category: category?.name as string || "",
+    startingPrice: Number(raw.startPrice) || 0,
+    currentPrice: Number(raw.currentPrice) || Number(raw.startPrice) || 0,
+    minBidIncrement: Number(raw.minIncrement) || 0,
+    startTime: (raw.startDate as string) || "",
+    endTime: endDate || "",
+    status: finalStatus,
+    sellerId: (raw.createdBy as string) || "",
+    sellerName: "",
+    totalBids: count?.bids ?? (raw.bidCount as number) ?? 0,
+    watchCount: (raw.viewCount as number) || 0,
+  };
+}
+
+function mapApiAuctionList(rawList: Record<string, unknown>[]): AuctionItem[] {
+  return (rawList || []).map(mapApiAuction);
+}
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
 export function useAuction(id: string) {
   return useQuery<AuctionItem>({
     queryKey: ["auction", id],
     queryFn: async () => {
       const { data } = await api.get(apiRoutes.auctions.detail(id));
-      return data.data;
+      return mapApiAuction(data);
     },
     enabled: !!id,
     staleTime: 10 * 1000,
@@ -54,7 +131,10 @@ export function useAuctions(params: AuctionListParams = {}) {
       const { data } = await api.get(
         `${apiRoutes.auctions.list}?${searchParams.toString()}`
       );
-      return data;
+      return {
+        data: mapApiAuctionList(data.data),
+        meta: data.meta,
+      };
     },
     staleTime: 15 * 1000,
   });
@@ -75,7 +155,10 @@ export function useInfiniteAuctions(params: Omit<AuctionListParams, "page"> = {}
       const { data } = await api.get(
         `${apiRoutes.auctions.list}?${searchParams.toString()}`
       );
-      return data;
+      return {
+        data: mapApiAuctionList(data.data),
+        meta: data.meta,
+      };
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
@@ -93,7 +176,7 @@ export function useFeaturedAuctions() {
     queryKey: ["auctions", "featured"],
     queryFn: async () => {
       const { data } = await api.get(apiRoutes.auctions.featured);
-      return data.data;
+      return mapApiAuctionList(data.data);
     },
     staleTime: 30 * 1000,
   });
@@ -104,7 +187,7 @@ export function useUpcomingAuctions() {
     queryKey: ["auctions", "upcoming"],
     queryFn: async () => {
       const { data } = await api.get(apiRoutes.auctions.upcoming);
-      return data.data;
+      return mapApiAuctionList(data.data);
     },
     staleTime: 30 * 1000,
   });

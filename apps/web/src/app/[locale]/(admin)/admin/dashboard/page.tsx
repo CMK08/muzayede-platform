@@ -35,9 +35,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { useAdminDashboard } from "@/hooks/use-dashboard";
 
-// Mock data for charts
+// Fallback data for charts (used when API data is loading or unavailable)
 const revenueData = [
   { month: "Oca", revenue: 450000, bids: 3200 },
   { month: "Sub", revenue: 580000, bids: 4100 },
@@ -152,41 +153,49 @@ const statusLabelMap: Record<string, string> = {
 export default function AdminDashboardPage() {
   const t = useTranslations("admin");
   const [chartPeriod, setChartPeriod] = useState<"weekly" | "monthly">("monthly");
+  const { data: dashboardData } = useAdminDashboard();
 
+  const stats = dashboardData?.stats;
   const statCards = [
     {
       title: t("totalRevenue"),
-      value: formatCurrency(8870000),
-      change: "+12.5%",
+      value: stats?.totalRevenue ? formatCurrency(stats.totalRevenue) : formatCurrency(0),
+      change: stats?.revenueChange || "+0%",
       changeType: "positive" as const,
       icon: DollarSign,
-      description: t("thisMonth") + ": " + formatCurrency(1100000),
+      description: stats?.monthlyRevenue ? t("thisMonth") + ": " + formatCurrency(stats.monthlyRevenue) : "",
     },
     {
       title: t("totalAuctions"),
-      value: "12,450",
-      change: "+8.2%",
+      value: stats?.totalAuctions?.toLocaleString() || "0",
+      change: stats?.auctionsChange || "+0%",
       changeType: "positive" as const,
       icon: Gavel,
-      description: t("activeAuctions") + ": 342",
+      description: stats?.activeAuctions ? t("activeAuctions") + ": " + stats.activeAuctions : "",
     },
     {
       title: t("totalUsers"),
-      value: "52,800",
-      change: "+15.3%",
+      value: stats?.totalUsers?.toLocaleString() || "0",
+      change: stats?.usersChange || "+0%",
       changeType: "positive" as const,
       icon: Users,
-      description: t("thisMonth") + ": 1,600",
+      description: stats?.newUsersThisMonth ? t("thisMonth") + ": " + stats.newUsersThisMonth.toLocaleString() : "",
     },
     {
       title: t("totalBids"),
-      value: "2.5M",
-      change: "+22.1%",
+      value: stats?.totalBids?.toLocaleString() || "0",
+      change: stats?.bidsChange || "+0%",
       changeType: "positive" as const,
       icon: Activity,
-      description: t("thisMonth") + ": 8,400",
+      description: stats?.monthlyBids ? t("thisMonth") + ": " + stats.monthlyBids.toLocaleString() : "",
     },
   ];
+
+  const chartRevenue = dashboardData?.revenueData || revenueData;
+  const chartBids = dashboardData?.weeklyBidData || weeklyBidData;
+  const chartUsers = dashboardData?.userGrowthData || userGrowthData;
+  const chartCategories = dashboardData?.categoryDistribution || categoryDistribution;
+  const latestAuctions = dashboardData?.recentAuctions || recentAuctions;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-4 lg:p-8">
@@ -262,7 +271,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={revenueData}>
+              <AreaChart data={chartRevenue}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#D4A843" stopOpacity={0.3} />
@@ -305,7 +314,7 @@ export default function AdminDashboardPage() {
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
-                  data={categoryDistribution}
+                  data={chartCategories}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -313,7 +322,7 @@ export default function AdminDashboardPage() {
                   paddingAngle={4}
                   dataKey="value"
                 >
-                  {categoryDistribution.map((entry, index) => (
+                  {chartCategories.map((entry: { name: string; value: number; color: string }, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -329,7 +338,7 @@ export default function AdminDashboardPage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="mt-4 space-y-2">
-              {categoryDistribution.map((cat) => (
+              {chartCategories.map((cat: { name: string; value: number; color: string }) => (
                 <div
                   key={cat.name}
                   className="flex items-center justify-between text-xs"
@@ -358,7 +367,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={weeklyBidData}>
+              <BarChart data={chartBids}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
                 <XAxis dataKey="day" fontSize={12} />
                 <YAxis fontSize={12} />
@@ -388,7 +397,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={userGrowthData}>
+              <LineChart data={chartUsers}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
                 <XAxis dataKey="month" fontSize={12} />
                 <YAxis
@@ -458,7 +467,7 @@ export default function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {recentAuctions.map((auction) => (
+                {latestAuctions.map((auction: { id: string; title: string; category: string; currentBid: number; bidCount: number; endDate: string; status: string }) => (
                   <tr
                     key={auction.id}
                     className="transition-colors hover:bg-[var(--muted)]/50"

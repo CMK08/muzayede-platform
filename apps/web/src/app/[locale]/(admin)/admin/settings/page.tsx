@@ -21,11 +21,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useAdminSettings, useUpdateAdminSettings } from "@/hooks/use-dashboard";
 
 export default function AdminSettingsPage() {
   const t = useTranslations("admin");
+  void t; // TODO: replace hardcoded strings with t() calls
   const [activeTab, setActiveTab] = useState("general");
-  const [saving, setSaving] = useState(false);
+  const { data: settingsData } = useAdminSettings();
+  void settingsData; // TODO: use API data when backend is ready
+  const updateSettingsMutation = useUpdateAdminSettings();
+  const saving = updateSettingsMutation.isPending;
 
   // General settings state
   const [generalSettings, setGeneralSettings] = useState({
@@ -74,9 +79,17 @@ export default function AdminSettingsPage() {
     robotsTxt: "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /dashboard/",
   });
 
-  const handleSave = () => {
-    setSaving(true);
-    setTimeout(() => setSaving(false), 1500);
+  const handleSave = async () => {
+    try {
+      await updateSettingsMutation.mutateAsync({
+        general: generalSettings,
+        commission: commissionSettings,
+        notifications: notifSettings,
+        seo: seoSettings,
+      });
+    } catch {
+      // Error handled by mutation
+    }
   };
 
   const notifLabels: Record<string, string> = {

@@ -1,39 +1,54 @@
 ###############################################################################
-# RDS Module — Variables
+# RDS Module - Variables
 ###############################################################################
 
-variable "identifier" {
-  description = "RDS instance identifier"
+variable "project" {
+  description = "Project name used for resource naming"
   type        = string
 }
 
 variable "environment" {
-  description = "Deployment environment"
+  description = "Environment name (dev, staging, production)"
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC"
+  type        = string
+}
+
+variable "database_subnet_ids" {
+  description = "IDs of the database subnets"
+  type        = list(string)
+}
+
+variable "allowed_security_group_id" {
+  description = "Security group ID allowed to connect to RDS (typically EKS node SG)"
   type        = string
 }
 
 variable "engine_version" {
   description = "PostgreSQL engine version"
   type        = string
-  default     = "16.2"
+  default     = "16.3"
 }
 
 variable "instance_class" {
   description = "RDS instance class"
   type        = string
-  default     = "db.r6g.xlarge"
+  default     = "db.t3.medium"
 }
 
 variable "allocated_storage" {
-  description = "Initial allocated storage in GiB"
+  description = "Allocated storage in GB"
   type        = number
-  default     = 100
+  default     = 20
 }
 
 variable "max_allocated_storage" {
-  description = "Maximum allocated storage for autoscaling in GiB"
+  description = "Maximum allocated storage in GB for autoscaling"
   type        = number
-  default     = 500
+  default     = 100
 }
 
 variable "database_name" {
@@ -46,47 +61,54 @@ variable "master_username" {
   description = "Master username for the database"
   type        = string
   default     = "muzayede_admin"
-  sensitive   = true
-}
-
-variable "master_password" {
-  description = "Master password for the database"
-  type        = string
-  sensitive   = true
 }
 
 variable "multi_az" {
   description = "Enable Multi-AZ deployment"
   type        = bool
-  default     = true
-}
-
-variable "vpc_id" {
-  description = "VPC ID where the RDS will be deployed"
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "Subnet IDs for the DB subnet group"
-  type        = list(string)
-}
-
-variable "allowed_security_group_ids" {
-  description = "Security group IDs allowed to connect to the RDS"
-  type        = list(string)
-  default     = []
+  default     = false
 }
 
 variable "backup_retention_period" {
   description = "Number of days to retain backups"
   type        = number
-  default     = 30
+  default     = 7
 }
 
-variable "kms_key_arn" {
-  description = "KMS key ARN for storage encryption"
+variable "deletion_protection" {
+  description = "Enable deletion protection"
+  type        = bool
+  default     = false
+}
+
+variable "skip_final_snapshot" {
+  description = "Skip final snapshot on deletion"
+  type        = bool
+  default     = true
+}
+
+variable "performance_insights_enabled" {
+  description = "Enable Performance Insights"
+  type        = bool
+  default     = true
+}
+
+variable "performance_insights_retention_period" {
+  description = "Performance Insights retention period in days"
+  type        = number
+  default     = 7
+}
+
+variable "enhanced_monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds (0 to disable)"
+  type        = number
+  default     = 60
+}
+
+variable "slow_query_log_threshold" {
+  description = "Slow query log threshold in milliseconds"
   type        = string
-  default     = null
+  default     = "1000"
 }
 
 variable "create_read_replica" {
@@ -96,13 +118,7 @@ variable "create_read_replica" {
 }
 
 variable "replica_instance_class" {
-  description = "Instance class for the read replica"
+  description = "Instance class for the read replica (defaults to primary instance class)"
   type        = string
-  default     = "db.r6g.large"
-}
-
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default     = {}
+  default     = null
 }

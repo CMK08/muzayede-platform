@@ -8,16 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { SmsService } from '../sms/sms.service';
 import { PushService } from '../push/push.service';
-import { NotificationChannel, Prisma } from '@prisma/client';
-
 type ChannelInput = 'email' | 'sms' | 'push' | 'in_app';
 
-function mapChannelToEnum(channel: ChannelInput): NotificationChannel {
-  const mapping: Record<ChannelInput, NotificationChannel> = {
-    email: NotificationChannel.EMAIL,
-    sms: NotificationChannel.SMS,
-    push: NotificationChannel.PUSH,
-    in_app: NotificationChannel.IN_APP,
+function mapChannelToEnum(channel: ChannelInput): string {
+  const mapping: Record<ChannelInput, string> = {
+    email: 'EMAIL',
+    sms: 'SMS',
+    push: 'PUSH',
+    in_app: 'IN_APP',
   };
   return mapping[channel];
 }
@@ -82,7 +80,7 @@ export class NotificationService {
             channel: mapChannelToEnum(channel),
             title,
             body,
-            dataJson: data as Prisma.JsonObject,
+            dataJson: data as any,
             imageUrl: data.imageUrl || null,
             actionUrl: data.actionUrl || null,
             isRead: false,
@@ -127,7 +125,7 @@ export class NotificationService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.NotificationWhereInput = {
+    const where: any = {
       userId,
     };
 
@@ -157,7 +155,7 @@ export class NotificationService {
     ]);
 
     return {
-      data: notifications.map((n) => ({
+      data: notifications.map((n: any) => ({
         id: n.id,
         type: n.type,
         channel: n.channel,
@@ -266,7 +264,7 @@ export class NotificationService {
     });
 
     return {
-      data: preferences.map((p) => ({
+      data: preferences.map((p: any) => ({
         id: p.id,
         type: p.type,
         emailEnabled: p.emailEnabled,

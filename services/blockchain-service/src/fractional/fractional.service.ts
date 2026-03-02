@@ -3,19 +3,27 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
 const FRACTIONAL_OWNERSHIP_ABI = [
-  'function createListing(address nftContract, uint256 nftTokenId, uint256 totalShares, uint256 pricePerShare) external returns (uint256)',
+  'function createListing(address nftContract, uint256 nftTokenId, uint256 totalShares, uint256 pricePerShare, uint256 minimumHoldingPeriod) external returns (uint256)',
   'function purchaseShares(uint256 listingId, uint256 shares) external payable',
-  'function getListing(uint256 listingId) external view returns (tuple(address nftContract, uint256 nftTokenId, uint256 totalShares, uint256 availableShares, uint256 pricePerShare, address originalOwner, bool isActive))',
+  'function getListing(uint256 listingId) external view returns (tuple(address nftContract, uint256 nftTokenId, uint256 totalShares, uint256 availableShares, uint256 pricePerShare, address originalOwner, bool isActive, uint256 createdAt, uint256 minimumHoldingPeriod, uint256 totalDividendsDistributed))',
   'function balanceOf(address account, uint256 id) external view returns (uint256)',
-  'event ListingCreated(uint256 indexed listingId, address nftContract, uint256 nftTokenId, uint256 totalShares, uint256 pricePerShare)',
+  'function soldShares(uint256 listingId) external view returns (uint256)',
+  'function canSell(uint256 listingId, address holder) external view returns (bool)',
+  'function distributeDividend(uint256 listingId) external payable',
+  'function claimDividend(uint256 listingId) external',
+  'function pendingDividend(uint256 listingId, address holder) external view returns (uint256)',
+  'function closeListing(uint256 listingId) external',
+  'event FractionCreated(uint256 indexed listingId, address indexed nftContract, uint256 indexed nftTokenId, uint256 totalShares, uint256 pricePerShare, uint256 minimumHoldingPeriod)',
   'event SharesPurchased(uint256 indexed listingId, address indexed buyer, uint256 shares, uint256 totalPaid)',
+  'event DividendDistributed(uint256 indexed listingId, uint256 amount, uint256 totalDividendsToDate)',
+  'event DividendClaimed(uint256 indexed listingId, address indexed holder, uint256 amount)',
+  'event ListingClosed(uint256 indexed listingId, address indexed closedBy)',
 ];
 
 @Injectable()
@@ -89,6 +97,7 @@ export class FractionalService {
     }
 
     let contractAddress: string | null = null;
+    let onChainListingId: string | null = null;
 
     if (this.fractionalContract && this.wallet) {
       try {
@@ -100,15 +109,34 @@ export class FractionalService {
 
         if (certificate && nftContractAddress) {
           const priceInWei = ethers.parseEther(pricePerShare.toString());
+          const minimumHoldingPeriod = 86400; // 1 day default
           const tx = await this.fractionalContract.createListing(
             nftContractAddress,
             BigInt(certificate.tokenId),
             totalShares,
             priceInWei,
+            minimumHoldingPeriod,
           );
           const receipt = await tx.wait();
           contractAddress = await this.fractionalContract.getAddress();
-          this.logger.log(`Fractional listing created on-chain, tx: ${receipt.hash}`);
+
+          // Parse listing ID from event
+          const iface = new ethers.Interface(FRACTIONAL_OWNERSHIP_ABI);
+          for (const log of receipt.logs) {
+            try {
+              const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+              if (parsed && parsed.name === 'FractionCreated') {
+                onChainListingId = parsed.args[0].toString();
+                break;
+              }
+            } catch {
+              // Not our event
+            }
+          }
+
+          this.logger.log(
+            `Fractional listing created on-chain, tx: ${receipt.hash}, listingId: ${onChainListingId}`,
+          );
         }
       } catch (error: any) {
         this.logger.warn(`On-chain fractional creation failed: ${error.message}`);
@@ -137,6 +165,7 @@ export class FractionalService {
           totalShares,
           pricePerShare,
           contractAddress,
+          onChainListingId,
         },
       },
     });
@@ -209,6 +238,62 @@ export class FractionalService {
         totalCost,
         currency: token.currency,
       },
+    };
+  }
+
+  /**
+   * Get fractional offering details by product ID.
+   */
+  async getFractionalByProduct(productId: string): Promise<{
+    token: any;
+    product: any;
+    shareholders: Array<{ userId: string; shares: number; totalInvested: number }>;
+  }> {
+    this.logger.log(`Getting fractional offering for product: ${productId}`);
+
+    const token = await this.prisma.fractionalToken.findFirst({
+      where: { productId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: {
+          include: {
+            media: { where: { isPrimary: true }, take: 1 },
+            category: true,
+          },
+        },
+      },
+    });
+
+    if (!token) {
+      throw new NotFoundException(
+        `No fractional offering found for product ${productId}`,
+      );
+    }
+
+    const shareholders = await this.getShareholders(token.id);
+
+    return {
+      token: {
+        id: token.id,
+        productId: token.productId,
+        contractAddress: token.contractAddress,
+        totalShares: token.totalShares,
+        availableShares: token.availableShares,
+        soldShares: token.totalShares - token.availableShares,
+        pricePerShare: Number(token.pricePerShare),
+        totalValue: token.totalShares * Number(token.pricePerShare),
+        currency: token.currency,
+        isActive: token.isActive,
+        createdAt: token.createdAt,
+      },
+      product: {
+        id: token.product.id,
+        title: token.product.title,
+        slug: token.product.slug,
+        imageUrl: token.product.media[0]?.url || null,
+        category: token.product.category?.name || null,
+      },
+      shareholders,
     };
   }
 

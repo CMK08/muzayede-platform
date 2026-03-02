@@ -94,7 +94,7 @@ export default function RegisterPage() {
         lastName: formData.lastName,
         kvkkConsent: formData.kvkkConsent,
       });
-      router.push(`/${locale}/dashboard`);
+      router.push(`/${locale}/profile`);
     } catch {
       // Error is handled by the store
     }

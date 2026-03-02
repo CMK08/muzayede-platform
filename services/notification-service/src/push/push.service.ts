@@ -189,7 +189,7 @@ export class PushService {
     // Extract tokens from the type field (format: push_token_{platform}_{hash})
     // In a real system, you'd store the actual token in a separate table.
     // For now, we return what we have. The actual token would be stored in the type suffix.
-    return tokenPrefs.map((pref) => {
+    return tokenPrefs.map((pref: any) => {
       // Extract the hash part which represents the token
       const parts = pref.type.split('_');
       return parts.slice(2).join('_');

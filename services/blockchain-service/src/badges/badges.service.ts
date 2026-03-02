@@ -9,11 +9,22 @@ import { ethers } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
 const COLLECTOR_BADGE_ABI = [
-  'function awardBadge(address to, string memory uri, string memory badgeType, string memory name, string memory rarity) external returns (uint256)',
-  'function hasBadge(address user, string memory badgeType) external view returns (bool)',
-  'function getBadgeInfo(uint256 tokenId) external view returns (tuple(string badgeType, string name, string rarity, uint256 awardedAt))',
-  'event BadgeAwarded(uint256 indexed tokenId, address indexed recipient, string badgeType, string name, string rarity)',
+  'function awardBadge(address to, uint8 tier, uint256 auctionWins) external returns (uint256)',
+  'function hasBadge(address user, uint8 tier) external view returns (bool)',
+  'function getBadgeInfo(uint256 tokenId) external view returns (tuple(uint8 tier, uint256 auctionWins, uint256 awardedAt))',
+  'function getUserBadgeToken(address user, uint8 tier) external view returns (uint256)',
+  'function totalMinted() external view returns (uint256)',
+  'function tierThresholds(uint8 tier) external view returns (uint256)',
+  'event BadgeAwarded(uint256 indexed tokenId, address indexed recipient, uint8 tier, uint256 auctionWins, uint256 timestamp)',
 ];
+
+// Maps badge type string to on-chain enum value
+const BADGE_TIER_ENUM: Record<string, number> = {
+  BRONZE: 0,
+  SILVER: 1,
+  GOLD: 2,
+  DIAMOND: 3,
+};
 
 interface BadgeTierConfig {
   type: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
@@ -142,23 +153,32 @@ export class BadgesService {
 
     if (this.badgeContract && this.wallet) {
       try {
-        const metadataUri = `ipfs://badge-metadata-${badgeType.toLowerCase()}-${userId}`;
+        const tierEnum = BADGE_TIER_ENUM[badgeType];
         const tx = await this.badgeContract.awardBadge(
-          user.id,
-          metadataUri,
-          badgeType,
-          tierConfig.name,
-          tierConfig.rarity,
+          user.id, // In production, this would be the user's wallet address
+          tierEnum,
+          userStats.totalPurchases,
         );
         const receipt = await tx.wait();
         txHash = receipt.hash;
 
-        const badgeEvent = receipt.logs.find(
-          (log: any) => log.fragment?.name === 'BadgeAwarded',
-        );
-        tokenId = badgeEvent
-          ? badgeEvent.args[0].toString()
-          : `soulbound_${Date.now()}`;
+        // Parse BadgeAwarded event
+        const iface = new ethers.Interface(COLLECTOR_BADGE_ABI);
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+            if (parsed && parsed.name === 'BadgeAwarded') {
+              tokenId = parsed.args[0].toString();
+              break;
+            }
+          } catch {
+            // Not our event
+          }
+        }
+
+        if (!tokenId) {
+          tokenId = `soulbound_${Date.now()}`;
+        }
       } catch (error: any) {
         this.logger.warn(`Blockchain badge minting failed: ${error.message}`);
         tokenId = `offchain_badge_${Date.now()}`;
@@ -189,6 +209,8 @@ export class BadgesService {
           txHash,
           tierName: tierConfig.name,
           rarity: tierConfig.rarity,
+          totalPurchases: userStats.totalPurchases,
+          totalSpend: userStats.totalSpend,
         },
       },
     });

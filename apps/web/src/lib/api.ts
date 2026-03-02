@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
 interface QueueItem {
   resolve: (value: string | null) => void;
@@ -137,14 +137,18 @@ export const apiRoutes = {
     create: "/auctions",
     update: (id: string) => `/auctions/${id}`,
     delete: (id: string) => `/auctions/${id}`,
+    publish: (id: string) => `/auctions/${id}/publish`,
+    start: (id: string) => `/auctions/${id}/start`,
+    end: (id: string) => `/auctions/${id}/end`,
     featured: "/auctions/featured",
     upcoming: "/auctions/upcoming",
     categories: "/auctions/categories",
+    similar: (id: string) => `/auctions/${id}/similar`,
   },
   bids: {
-    list: (auctionId: string) => `/auctions/${auctionId}/bids`,
-    place: (auctionId: string) => `/auctions/${auctionId}/bids`,
-    proxy: (auctionId: string) => `/auctions/${auctionId}/bids/proxy`,
+    list: (auctionId: string) => `/bids/auction/${auctionId}`,
+    place: (_auctionId: string) => `/bids`,
+    proxy: (_auctionId: string) => `/bids/proxy`,
   },
   users: {
     profile: "/users/profile",
@@ -152,12 +156,46 @@ export const apiRoutes = {
     bids: "/users/bids",
     auctions: "/users/auctions",
     watchlist: "/users/watchlist",
+    orders: "/users/orders",
+    notifications: "/users/notifications",
+    favorites: "/users/favorites",
   },
+  products: {
+    list: "/products",
+    detail: (id: string) => `/products/${id}`,
+    create: "/products",
+    update: (id: string) => `/products/${id}`,
+    delete: (id: string) => `/products/${id}`,
+  },
+  categories: {
+    list: "/categories",
+  },
+  notifications: {
+    list: "/notifications",
+    markRead: (id: string) => `/notifications/${id}/read`,
+    markAllRead: "/notifications/read-all",
+  },
+  orders: {
+    list: "/orders",
+    detail: (id: string) => `/orders/${id}`,
+    update: (id: string) => `/orders/${id}`,
+  },
+  search: "/search",
   admin: {
     dashboard: "/admin/dashboard",
     users: "/admin/users",
     auctions: "/admin/auctions",
+    products: "/admin/products",
+    orders: "/admin/orders",
+    finance: "/admin/finance",
     reports: "/admin/reports",
     settings: "/admin/settings",
+    cms: "/admin/cms",
+  },
+  seller: {
+    dashboard: "/seller/dashboard",
+    products: "/seller/products",
+    earnings: "/seller/earnings",
+    payouts: "/seller/payouts",
   },
 } as const;

@@ -7,6 +7,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,9 +19,14 @@ import { AuctioneerService } from './auctioneer.service';
 import { AbsenteeService } from '../absentee/absentee.service';
 import { StreamingService } from '../streaming/streaming.service';
 import { ChatService } from '../chat-service/chat.service';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { RolesGuard } from '../guards/roles.guard';
+import { Roles } from '../guards/roles.guard';
 
 @ApiTags('auctioneer')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'SUPER_ADMIN', 'AUCTION_HOUSE')
 @Controller('auctioneer')
 export class AuctioneerController {
   constructor(

@@ -11,18 +11,58 @@ export class BannersService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(position?: string) {
-    this.logger.log(`Listing banners: position=${position || 'all'}`);
+  async findAll(query?: {
+    position?: string;
+    isActive?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
+    this.logger.log(`Listing banners: ${JSON.stringify(query || {})}`);
+
+    const page = query?.page || 1;
+    const limit = query?.limit || 20;
+    const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (position) {
-      where.position = position;
+
+    if (query?.position) {
+      where.position = query.position;
     }
 
-    return this.prisma.banner.findMany({
-      where,
-      orderBy: { sortOrder: 'asc' },
-    });
+    if (query?.isActive !== undefined) {
+      where.isActive = query.isActive;
+    }
+
+    const [banners, total] = await Promise.all([
+      this.prisma.banner.findMany({
+        where,
+        orderBy: { sortOrder: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.banner.count({ where }),
+    ]);
+
+    return {
+      data: banners,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findOne(id: string) {
+    this.logger.log(`Getting banner: ${id}`);
+
+    const banner = await this.prisma.banner.findUnique({ where: { id } });
+    if (!banner) {
+      throw new NotFoundException(`Banner with ID '${id}' not found`);
+    }
+
+    return banner;
   }
 
   async create(dto: {
@@ -44,7 +84,7 @@ export class BannersService {
         imageUrl: dto.imageUrl,
         mobileImageUrl: dto.mobileImageUrl || null,
         linkUrl: dto.linkUrl || null,
-        position: dto.position || 'homepage',
+        position: dto.position || 'home_hero',
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
         startDate: dto.startDate ? new Date(dto.startDate) : null,

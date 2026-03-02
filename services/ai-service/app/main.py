@@ -1,53 +1,75 @@
 """
-Muzayede AI Service - FastAPI Application
-Provides recommendation, visual search, categorization, and fraud detection.
+Muzayede AI Service -- FastAPI Application.
+
+Provides:
+  - Personalised product recommendations  (collaborative + content-based)
+  - Visual similarity search              (CLIP embeddings)
+  - Automatic product categorisation      (ResNet-50 / EfficientNet)
+  - Shill-bidding / fraud detection       (Isolation Forest)
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import logging
 import os
 
 from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from app.database import init_pool, close_pool
-from app.recommendation.router import router as recommendation_router
-from app.visual_search.router import router as visual_search_router
-from app.categorization.router import router as categorization_router
-from app.fraud_detection.router import router as fraud_detection_router
+from app.database import init_pool, close_pool  # noqa: E402
+from app.recommendation.router import router as recommendation_router  # noqa: E402
+from app.visual_search.router import router as visual_search_router  # noqa: E402
+from app.categorization.router import router as categorization_router  # noqa: E402
+from app.fraud_detection.router import router as fraud_detection_router  # noqa: E402
 
-logging.basicConfig(level=logging.INFO)
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Lifespan (startup / shutdown)
+# ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
-    logger.info("AI Service starting up...")
+    logger.info("AI Service starting up ...")
 
-    # Initialize database connection pool
+    # Database ------------------------------------------------------------------
     try:
         init_pool(min_connections=2, max_connections=10)
-        logger.info("Database connection pool initialized")
-    except Exception as e:
-        logger.warning(f"Database connection pool initialization failed: {e}")
-        logger.warning("Service will start without database connectivity")
+        logger.info("Database connection pool initialised")
+    except Exception as exc:
+        logger.warning("Database pool init failed: %s -- service will start without DB", exc)
 
-    logger.info("AI Service started successfully")
+    # Lazy-load heavy ML models in background so the health-check is responsive
+    # immediately. The individual service singletons handle their own loading.
+    logger.info("AI Service ready on port %s", os.getenv("PORT", "3011"))
     yield
 
-    # Shutdown
-    logger.info("AI Service shutting down...")
+    # Shutdown ------------------------------------------------------------------
+    logger.info("AI Service shutting down ...")
     close_pool()
     logger.info("AI Service shutdown complete")
 
 
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
 app = FastAPI(
     title="Muzayede AI Service",
-    description="AI-powered recommendation, visual search, auto-categorization, and fraud detection",
+    description=(
+        "AI-powered recommendation, visual search, "
+        "auto-categorisation, and fraud detection"
+    ),
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -64,6 +86,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Route mounting
+# ---------------------------------------------------------------------------
 app.include_router(
     recommendation_router,
     prefix="/api/v1/ai/recommendations",
@@ -86,9 +111,12 @@ app.include_router(
 )
 
 
+# ---------------------------------------------------------------------------
+# Health & status
+# ---------------------------------------------------------------------------
 @app.get("/health", tags=["health"])
-async def health_check():
-    """Health check endpoint."""
+async def health_check() -> dict:
+    """Liveness probe."""
     return {
         "status": "healthy",
         "service": "ai-service",
@@ -97,35 +125,41 @@ async def health_check():
 
 
 @app.get("/api/v1/ai/status", tags=["health"])
-async def ai_status():
-    """AI service status with model information."""
+async def ai_status() -> dict:
+    """Readiness probe with per-model metadata."""
     return {
         "status": "running",
         "models": {
             "recommendation": {
                 "loaded": True,
                 "type": "hybrid_collaborative_content",
-                "description": "Collaborative filtering (60%) + Content-based (40%)",
+                "description": (
+                    "Cosine similarity on user-item interaction matrix (60 %) "
+                    "+ TF-IDF content-based filtering (40 %)"
+                ),
             },
             "visual_search": {
                 "loaded": True,
-                "type": "color_edge_histogram",
-                "description": "Color histogram + edge detection features with cosine similarity",
+                "type": "clip_vit_base_patch32",
+                "description": "CLIP ViT-B/32 embeddings with cosine distance",
             },
             "categorization": {
                 "loaded": True,
-                "type": "keyword_tfidf",
-                "description": "Turkish keyword matching with TF-IDF scoring",
+                "type": "resnet50_imagenet",
+                "description": "ResNet-50 ImageNet classifier mapped to auction categories",
             },
             "fraud_detection": {
                 "loaded": True,
-                "type": "zscore_anomaly_detection",
-                "description": "Z-score based outlier detection on bid patterns",
+                "type": "isolation_forest",
+                "description": "Isolation Forest anomaly detection on bid-pattern features",
             },
         },
     }
 
 
+# ---------------------------------------------------------------------------
+# Dev entry-point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 

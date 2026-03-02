@@ -3,21 +3,17 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 import {
   LayoutDashboard,
   Users,
   Gavel,
-  BarChart3,
   Settings,
   Shield,
   Menu,
   X,
   ChevronLeft,
-  Bell,
   FileText,
-  CreditCard,
-  Tag,
   Package,
   ShoppingCart,
   DollarSign,

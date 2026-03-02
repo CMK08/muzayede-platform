@@ -10,13 +10,14 @@ import {
   Trash2,
   Gavel,
   Clock,
-  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { AuctionImage } from "@/components/auction/auction-image";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { useFavorites, useToggleFavorite } from "@/hooks/use-dashboard";
 
 interface FavoriteItem {
   id: string;
@@ -31,81 +32,6 @@ interface FavoriteItem {
   notifyOnStart: boolean;
 }
 
-const mockFavorites: FavoriteItem[] = [
-  {
-    id: "FAV-001",
-    auctionId: "AUC-001",
-    title: "Osmanli Donemi Altin Kupe Seti",
-    image: null,
-    category: "Antika Taki",
-    currentPrice: 42500,
-    status: "active",
-    endDate: "2026-03-05T22:00:00Z",
-    bidCount: 28,
-    notifyOnStart: true,
-  },
-  {
-    id: "FAV-002",
-    auctionId: "AUC-003",
-    title: "Rolex Daytona 116500LN Sifir",
-    image: null,
-    category: "Luks Saat",
-    currentPrice: 850000,
-    status: "upcoming",
-    endDate: "2026-03-20T22:00:00Z",
-    bidCount: 0,
-    notifyOnStart: true,
-  },
-  {
-    id: "FAV-003",
-    auctionId: "AUC-008",
-    title: "Patek Philippe Nautilus 5711/1A",
-    image: null,
-    category: "Luks Saat",
-    currentPrice: 2150000,
-    status: "active",
-    endDate: "2026-03-12T22:00:00Z",
-    bidCount: 8,
-    notifyOnStart: false,
-  },
-  {
-    id: "FAV-004",
-    auctionId: "AUC-009",
-    title: "Iznik Cinisi Tabak Koleksiyonu (6 Adet)",
-    image: null,
-    category: "Antika",
-    currentPrice: 55000,
-    status: "upcoming",
-    endDate: "2026-03-15T22:00:00Z",
-    bidCount: 0,
-    notifyOnStart: false,
-  },
-  {
-    id: "FAV-005",
-    auctionId: "AUC-006",
-    title: "Antika Osmanli Hancer - 18. Yuzyil",
-    image: null,
-    category: "Antika",
-    currentPrice: 35000,
-    status: "active",
-    endDate: "2026-03-08T20:00:00Z",
-    bidCount: 22,
-    notifyOnStart: true,
-  },
-  {
-    id: "FAV-006",
-    auctionId: "AUC-010",
-    title: "Mercedes-Benz 300SL Gullwing 1955",
-    image: null,
-    category: "Klasik Otomobil",
-    currentPrice: 4250000,
-    status: "sold",
-    endDate: "2026-02-10T22:00:00Z",
-    bidCount: 34,
-    notifyOnStart: false,
-  },
-];
-
 const statusConfig: Record<
   string,
   { label: string; variant: "live" | "secondary" | "success" | "default" }
@@ -118,10 +44,43 @@ const statusConfig: Record<
 
 export default function FavoritesPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
-  const [favorites, setFavorites] = useState(mockFavorites);
+
+  const { data: favoritesData, isLoading } = useFavorites(1, 50);
+  const toggleFavoriteMutation = useToggleFavorite();
+
+  const apiFavorites: FavoriteItem[] = (favoritesData?.data || []).map((f: Record<string, unknown>) => {
+    const auction = (f.auction || {}) as Record<string, unknown>;
+    const images = (auction.images || []) as string[];
+    return {
+      id: f.id as string,
+      auctionId: (f.auctionId || auction.id || f.id) as string,
+      title: (f.title || auction.title || "") as string,
+      image: (f.image || images[0] || null) as string | null,
+      category: (f.category || auction.category || "") as string,
+      currentPrice: (f.currentPrice || auction.currentPrice || 0) as number,
+      status: (f.status || auction.status || "active") as FavoriteItem["status"],
+      endDate: (f.endDate || auction.endTime || "") as string,
+      bidCount: (f.bidCount || auction.totalBids || 0) as number,
+      notifyOnStart: (f.notifyOnStart || false) as boolean,
+    };
+  });
+
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+
+  // Sync API data to local state
+  React.useEffect(() => {
+    if (apiFavorites.length > 0) {
+      setFavorites(apiFavorites);
+    }
+  }, [favoritesData]);
 
   const removeFavorite = (id: string) => {
+    const fav = favorites.find((f) => f.id === id);
+    if (fav) {
+      toggleFavoriteMutation.mutate(fav.auctionId);
+    }
     setFavorites((prev) => prev.filter((f) => f.id !== id));
   };
 
@@ -146,7 +105,11 @@ export default function FavoritesPage() {
       </div>
 
       {/* Favorites Grid */}
-      {favorites.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+        </div>
+      ) : favorites.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Heart className="h-16 w-16 text-[var(--muted-foreground)]" />
@@ -171,9 +134,14 @@ export default function FavoritesPage() {
                 <Link href={`/${locale}/auctions/${item.auctionId}`}>
                   {/* Image */}
                   <div className="relative aspect-[4/3] overflow-hidden bg-[var(--muted)]">
-                    <div className="flex h-full items-center justify-center">
-                      <ImageIcon className="h-12 w-12 text-[var(--muted-foreground)]" />
-                    </div>
+                    <AuctionImage
+                      src={item.image}
+                      alt={item.title}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-110"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      compact
+                    />
                     <div className="absolute left-3 top-3">
                       <Badge variant={config.variant}>{config.label}</Badge>
                     </div>

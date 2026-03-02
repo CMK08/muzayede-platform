@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Package,
   DollarSign,
-  Gavel,
   Plus,
   Menu,
   X,

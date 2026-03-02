@@ -207,9 +207,11 @@ export function BidPanel({ auctionId, className }: BidPanelProps) {
             <p className="text-sm text-[var(--muted-foreground)]">
               {t("loginRequired")}
             </p>
-            <Button className="mt-3" size="sm" asChild>
-              <a href="/tr/login">{t("loginToBid")}</a>
-            </Button>
+            <a href="/tr/login">
+              <Button className="mt-3" size="sm">
+                {t("loginToBid")}
+              </Button>
+            </a>
           </div>
         )}
 

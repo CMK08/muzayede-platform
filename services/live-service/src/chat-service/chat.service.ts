@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   auctionId: string;
   userId: string;

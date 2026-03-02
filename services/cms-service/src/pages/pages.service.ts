@@ -12,11 +12,44 @@ export class PagesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
-    this.logger.log('Listing all pages');
-    return this.prisma.page.findMany({
-      orderBy: { sortOrder: 'asc' },
-    });
+  async findAll(query?: {
+    status?: 'draft' | 'published';
+    page?: number;
+    limit?: number;
+  }) {
+    this.logger.log(`Listing pages: ${JSON.stringify(query || {})}`);
+
+    const page = query?.page || 1;
+    const limit = query?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (query?.status === 'published') {
+      where.isPublished = true;
+    } else if (query?.status === 'draft') {
+      where.isPublished = false;
+    }
+
+    const [pages, total] = await Promise.all([
+      this.prisma.page.findMany({
+        where,
+        orderBy: { sortOrder: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.page.count({ where }),
+    ]);
+
+    return {
+      data: pages,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findBySlug(slug: string) {
@@ -39,7 +72,7 @@ export class PagesService {
     metaTitle?: string;
     metaDescription?: string;
     ogImageUrl?: string;
-    isPublished?: boolean;
+    status?: 'draft' | 'published';
     sortOrder?: number;
   }) {
     this.logger.log(`Creating page: ${dto.slug}`);
@@ -52,6 +85,8 @@ export class PagesService {
       throw new ConflictException(`Page with slug '${dto.slug}' already exists`);
     }
 
+    const isPublished = dto.status === 'published';
+
     return this.prisma.page.create({
       data: {
         slug: dto.slug,
@@ -60,7 +95,7 @@ export class PagesService {
         metaTitle: dto.metaTitle || null,
         metaDescription: dto.metaDescription || null,
         ogImageUrl: dto.ogImageUrl || null,
-        isPublished: dto.isPublished ?? false,
+        isPublished,
         sortOrder: dto.sortOrder ?? 0,
       },
     });
@@ -75,6 +110,7 @@ export class PagesService {
       metaTitle?: string;
       metaDescription?: string;
       ogImageUrl?: string;
+      status?: 'draft' | 'published';
       sortOrder?: number;
     },
   ) {
@@ -103,6 +139,7 @@ export class PagesService {
         ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle }),
         ...(dto.metaDescription !== undefined && { metaDescription: dto.metaDescription }),
         ...(dto.ogImageUrl !== undefined && { ogImageUrl: dto.ogImageUrl }),
+        ...(dto.status !== undefined && { isPublished: dto.status === 'published' }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
       },
     });

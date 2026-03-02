@@ -9,8 +9,6 @@ import { TrustScoreService } from '../trust-score/trust-score.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { QueryUsersDto, SortBy } from './dto/query-users.dto';
 import { BlacklistUserDto } from './dto/blacklist-user.dto';
-import { Prisma } from '@prisma/client';
-
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -34,7 +32,7 @@ export class UsersService {
 
     const skip = (page - 1) * limit;
 
-    const where: Prisma.UserWhereInput = {};
+    const where: any = {};
 
     // Search filter: case-insensitive contains on email, firstName, lastName
     if (search) {
@@ -55,7 +53,7 @@ export class UsersService {
 
     // Role filter
     if (role) {
-      where.role = role as Prisma.EnumUserRoleFilter['equals'];
+      where.role = role as any;
     }
 
     // Active status filter
@@ -65,11 +63,11 @@ export class UsersService {
 
     // KYC status filter
     if (kycStatus) {
-      where.kycStatus = kycStatus as Prisma.EnumKycStatusFilter['equals'];
+      where.kycStatus = kycStatus as any;
     }
 
     // Build orderBy
-    const orderBy: Prisma.UserOrderByWithRelationInput = {};
+    const orderBy: any = {};
     if (sortBy === SortBy.TRUST_SCORE) {
       orderBy.trustScore = sortOrder;
     } else {
@@ -135,7 +133,7 @@ export class UsersService {
           metadata: { viewedAt: new Date().toISOString() },
         },
       })
-      .catch((err) => {
+      .catch((err: any) => {
         this.logger.warn(`Failed to create audit log for profile view: ${err.message}`);
       });
 
@@ -176,7 +174,7 @@ export class UsersService {
     }
 
     // Separate user-level fields from profile-level fields
-    const userUpdateData: Prisma.UserUpdateInput = {};
+    const userUpdateData: any = {};
     if (dto.email) userUpdateData.email = dto.email;
     if (dto.phone !== undefined) userUpdateData.phone = dto.phone;
     if (dto.avatarUrl !== undefined) userUpdateData.avatarUrl = dto.avatarUrl;

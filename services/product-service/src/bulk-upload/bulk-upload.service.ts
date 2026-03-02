@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { ProductsService } from '../products/products.service';
 import { CategoriesService } from '../categories/categories.service';
 
-interface BulkUploadResult {
+export interface BulkUploadResult {
   total: number;
   successful: number;
   failed: number;

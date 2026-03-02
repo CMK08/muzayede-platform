@@ -10,7 +10,7 @@ import {
   XCircle,
   ArrowUpRight,
   TrendingUp,
-  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +25,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
+import { AuctionImage } from "@/components/auction/auction-image";
+import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { useUserBids } from "@/hooks/use-bids";
 
 interface BidItem {
   id: string;
@@ -40,93 +42,6 @@ interface BidItem {
   category: string;
 }
 
-const mockBids: BidItem[] = [
-  {
-    id: "BID-001",
-    auctionId: "AUC-001",
-    auctionTitle: "Osmanli Donemi Altin Kupe Seti",
-    auctionImage: null,
-    myBidAmount: 42500,
-    currentPrice: 42500,
-    status: "active",
-    endDate: "2026-03-05T22:00:00Z",
-    bidDate: "2026-02-25T15:30:00Z",
-    category: "Antika Taki",
-  },
-  {
-    id: "BID-002",
-    auctionId: "AUC-002",
-    auctionTitle: "1967 Ford Mustang Shelby GT500",
-    auctionImage: null,
-    myBidAmount: 820000,
-    currentPrice: 875000,
-    status: "outbid",
-    endDate: "2026-03-02T20:00:00Z",
-    bidDate: "2026-02-24T12:00:00Z",
-    category: "Klasik Otomobil",
-  },
-  {
-    id: "BID-003",
-    auctionId: "AUC-008",
-    auctionTitle: "Patek Philippe Nautilus 5711/1A",
-    auctionImage: null,
-    myBidAmount: 2150000,
-    currentPrice: 2150000,
-    status: "active",
-    endDate: "2026-03-12T22:00:00Z",
-    bidDate: "2026-02-26T09:00:00Z",
-    category: "Luks Saat",
-  },
-  {
-    id: "BID-004",
-    auctionId: "AUC-004",
-    auctionTitle: "Yagli Boya Tablo - Istanbul Bogazi",
-    auctionImage: null,
-    myBidAmount: 68000,
-    currentPrice: 68000,
-    status: "won",
-    endDate: "2026-02-15T22:00:00Z",
-    bidDate: "2026-02-14T20:00:00Z",
-    category: "Sanat",
-  },
-  {
-    id: "BID-005",
-    auctionId: "AUC-010",
-    auctionTitle: "Mercedes-Benz 300SL Gullwing 1955",
-    auctionImage: null,
-    myBidAmount: 3800000,
-    currentPrice: 4250000,
-    status: "lost",
-    endDate: "2026-02-10T22:00:00Z",
-    bidDate: "2026-02-08T14:00:00Z",
-    category: "Klasik Otomobil",
-  },
-  {
-    id: "BID-006",
-    auctionId: "AUC-011",
-    auctionTitle: "Cartier Love Bileklik - Altin",
-    auctionImage: null,
-    myBidAmount: 75000,
-    currentPrice: 78000,
-    status: "outbid",
-    endDate: "2026-03-07T22:00:00Z",
-    bidDate: "2026-02-25T11:00:00Z",
-    category: "Mucevher",
-  },
-  {
-    id: "BID-007",
-    auctionId: "AUC-006",
-    auctionTitle: "Antika Osmanli Hancer - 18. Yuzyil",
-    auctionImage: null,
-    myBidAmount: 35000,
-    currentPrice: 35000,
-    status: "active",
-    endDate: "2026-03-08T20:00:00Z",
-    bidDate: "2026-02-23T16:30:00Z",
-    category: "Antika",
-  },
-];
-
 const statusConfig: Record<
   string,
   { label: string; variant: "live" | "success" | "destructive" | "warning"; icon: typeof Gavel }
@@ -139,6 +54,7 @@ const statusConfig: Record<
 
 export default function MyBidsPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
   const [activeTab, setActiveTab] = useState("all");
   const [increaseBidDialog, setIncreaseBidDialog] = useState<{
@@ -147,28 +63,47 @@ export default function MyBidsPage() {
   }>({ open: false, bid: null });
   const [newBidAmount, setNewBidAmount] = useState("");
 
+  const { data: bidsData, isLoading } = useUserBids(1, 50);
+  const allBids: BidItem[] = (bidsData?.data || []).map((b) => {
+    const bid = b as unknown as Record<string, unknown>;
+    const auction = (bid.auction || {}) as Record<string, unknown>;
+    const images = (auction.images || []) as string[];
+    return {
+      id: bid.id as string,
+      auctionId: bid.auctionId as string,
+      auctionTitle: (bid.auctionTitle || auction.title || "") as string,
+      auctionImage: (bid.auctionImage || images[0] || null) as string | null,
+      myBidAmount: (bid.amount || bid.myBidAmount || 0) as number,
+      currentPrice: (bid.currentPrice || auction.currentPrice || 0) as number,
+      status: (bid.status || "active") as BidItem["status"],
+      endDate: (bid.endDate || auction.endTime || "") as string,
+      bidDate: (bid.timestamp || bid.bidDate || bid.createdAt || "") as string,
+      category: (bid.category || auction.category || "") as string,
+    };
+  });
+
   const filterBids = (tab: string): BidItem[] => {
     switch (tab) {
       case "active":
-        return mockBids.filter(
+        return allBids.filter(
           (b) => b.status === "active" || b.status === "outbid"
         );
       case "won":
-        return mockBids.filter((b) => b.status === "won");
+        return allBids.filter((b) => b.status === "won");
       case "lost":
-        return mockBids.filter((b) => b.status === "lost");
+        return allBids.filter((b) => b.status === "lost");
       default:
-        return mockBids;
+        return allBids;
     }
   };
 
   const bids = filterBids(activeTab);
 
-  const activeBidsCount = mockBids.filter(
+  const activeBidsCount = allBids.filter(
     (b) => b.status === "active" || b.status === "outbid"
   ).length;
-  const wonCount = mockBids.filter((b) => b.status === "won").length;
-  const lostCount = mockBids.filter((b) => b.status === "lost").length;
+  const wonCount = allBids.filter((b) => b.status === "won").length;
+  const lostCount = allBids.filter((b) => b.status === "lost").length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -185,7 +120,7 @@ export default function MyBidsPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <Gavel className="mx-auto h-5 w-5 text-primary-500" />
-            <p className="mt-2 text-2xl font-bold">{mockBids.length}</p>
+            <p className="mt-2 text-2xl font-bold">{allBids.length}</p>
             <p className="text-xs text-[var(--muted-foreground)]">Toplam</p>
           </CardContent>
         </Card>
@@ -215,7 +150,7 @@ export default function MyBidsPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">Tumu ({mockBids.length})</TabsTrigger>
+          <TabsTrigger value="all">Tumu ({allBids.length})</TabsTrigger>
           <TabsTrigger value="active">Aktif ({activeBidsCount})</TabsTrigger>
           <TabsTrigger value="won">Kazanilan ({wonCount})</TabsTrigger>
           <TabsTrigger value="lost">Kaybedilen ({lostCount})</TabsTrigger>
@@ -223,7 +158,11 @@ export default function MyBidsPage() {
 
         <TabsContent value={activeTab}>
           <div className="space-y-3">
-            {bids.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+              </div>
+            ) : bids.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Gavel className="h-12 w-12 text-[var(--muted-foreground)]" />
@@ -249,8 +188,14 @@ export default function MyBidsPage() {
                     <CardContent className="p-0">
                       <div className="flex gap-4 p-4">
                         {/* Image */}
-                        <div className="hidden h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--muted)] sm:flex">
-                          <ImageIcon className="h-8 w-8 text-[var(--muted-foreground)]" />
+                        <div className="relative hidden h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:flex">
+                          <AuctionImage
+                            src={bid.auctionImage}
+                            alt={bid.auctionTitle}
+                            fill
+                            className="object-cover"
+                            compact
+                          />
                         </div>
 
                         {/* Content */}

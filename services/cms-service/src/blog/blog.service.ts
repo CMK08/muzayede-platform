@@ -13,8 +13,10 @@ export class BlogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query?: {
-    isPublished?: boolean;
+    status?: 'draft' | 'published';
     search?: string;
+    tag?: string;
+    author?: string;
     page?: number;
     limit?: number;
   }) {
@@ -26,12 +28,22 @@ export class BlogService {
 
     const where: any = {};
 
-    if (query?.isPublished !== undefined) {
-      where.isPublished = query.isPublished;
+    if (query?.status === 'published') {
+      where.isPublished = true;
+    } else if (query?.status === 'draft') {
+      where.isPublished = false;
     }
 
     if (query?.search) {
       where.title = { contains: query.search, mode: 'insensitive' };
+    }
+
+    if (query?.tag) {
+      where.tags = { has: query.tag };
+    }
+
+    if (query?.author) {
+      where.author = { contains: query.author, mode: 'insensitive' };
     }
 
     const [posts, total] = await Promise.all([
@@ -74,11 +86,14 @@ export class BlogService {
     slug: string;
     excerpt?: string;
     contentHtml: string;
-    coverImageUrl?: string;
+    coverImage?: string;
+    author: string;
     authorId: string;
+    tags?: string[];
     metaTitle?: string;
     metaDescription?: string;
-    isPublished?: boolean;
+    ogImageUrl?: string;
+    status?: 'draft' | 'published';
   }) {
     this.logger.log(`Creating blog post: ${dto.slug}`);
 
@@ -90,18 +105,23 @@ export class BlogService {
       throw new ConflictException(`Blog post with slug '${dto.slug}' already exists`);
     }
 
+    const isPublished = dto.status === 'published';
+
     return this.prisma.blogPost.create({
       data: {
         title: dto.title,
         slug: dto.slug,
         excerpt: dto.excerpt || null,
         contentHtml: dto.contentHtml,
-        coverImageUrl: dto.coverImageUrl || null,
+        coverImageUrl: dto.coverImage || null,
+        author: dto.author,
         authorId: dto.authorId,
+        tags: dto.tags || [],
         metaTitle: dto.metaTitle || null,
         metaDescription: dto.metaDescription || null,
-        isPublished: dto.isPublished ?? false,
-        publishedAt: dto.isPublished ? new Date() : null,
+        ogImageUrl: dto.ogImageUrl || null,
+        isPublished,
+        publishedAt: isPublished ? new Date() : null,
       },
     });
   }
@@ -113,9 +133,13 @@ export class BlogService {
       slug?: string;
       excerpt?: string;
       contentHtml?: string;
-      coverImageUrl?: string;
+      coverImage?: string;
+      author?: string;
+      tags?: string[];
       metaTitle?: string;
       metaDescription?: string;
+      ogImageUrl?: string;
+      status?: 'draft' | 'published';
     },
   ) {
     this.logger.log(`Updating blog post: ${id}`);
@@ -134,17 +158,29 @@ export class BlogService {
       }
     }
 
+    const data: any = {};
+
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.slug !== undefined) data.slug = dto.slug;
+    if (dto.excerpt !== undefined) data.excerpt = dto.excerpt;
+    if (dto.contentHtml !== undefined) data.contentHtml = dto.contentHtml;
+    if (dto.coverImage !== undefined) data.coverImageUrl = dto.coverImage;
+    if (dto.author !== undefined) data.author = dto.author;
+    if (dto.tags !== undefined) data.tags = dto.tags;
+    if (dto.metaTitle !== undefined) data.metaTitle = dto.metaTitle;
+    if (dto.metaDescription !== undefined) data.metaDescription = dto.metaDescription;
+    if (dto.ogImageUrl !== undefined) data.ogImageUrl = dto.ogImageUrl;
+
+    if (dto.status !== undefined) {
+      data.isPublished = dto.status === 'published';
+      if (dto.status === 'published' && !post.isPublished) {
+        data.publishedAt = new Date();
+      }
+    }
+
     return this.prisma.blogPost.update({
       where: { id },
-      data: {
-        ...(dto.title !== undefined && { title: dto.title }),
-        ...(dto.slug !== undefined && { slug: dto.slug }),
-        ...(dto.excerpt !== undefined && { excerpt: dto.excerpt }),
-        ...(dto.contentHtml !== undefined && { contentHtml: dto.contentHtml }),
-        ...(dto.coverImageUrl !== undefined && { coverImageUrl: dto.coverImageUrl }),
-        ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle }),
-        ...(dto.metaDescription !== undefined && { metaDescription: dto.metaDescription }),
-      },
+      data,
     });
   }
 

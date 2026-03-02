@@ -29,12 +29,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
+import { useAdminCms } from "@/hooks/use-dashboard";
 
-// Mock data
+// Fallback data
 const mockPages = [
   {
     id: "1",
@@ -198,6 +198,9 @@ const mockFaqs = [
 
 export default function AdminCmsPage() {
   const t = useTranslations("admin");
+  void t; // TODO: replace hardcoded strings with t() calls
+  const { data: cmsData } = useAdminCms();
+  void cmsData; // TODO: use API data when backend is ready
   const [activeTab, setActiveTab] = useState("pages");
   const [editPageDialog, setEditPageDialog] = useState<{
     open: boolean;

@@ -2,7 +2,6 @@
 
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowRight,
@@ -25,132 +24,81 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AuctionCard } from "@/components/auction/auction-card";
+import { AuctionImage } from "@/components/auction/auction-image";
 import { CountdownTimer } from "@/components/auction/countdown-timer";
 import { formatCurrency } from "@/lib/utils";
-import type { AuctionItem } from "@/stores/auction-store";
+import { useFeaturedAuctions, useUpcomingAuctions, useAuctionCategories } from "@/hooks/use-auction";
 
-// Mock data for demonstration
-const mockFeaturedAuctions: AuctionItem[] = [
-  {
-    id: "1",
-    title: "Osmanli Donemi Altin Kupe Seti - 18. Yuzyil",
-    description: "Nadir bulunan Osmanli donemi el isciliginde altin kupe seti",
-    images: ["https://images.unsplash.com/photo-1515562141589-67f0d569b6c6?w=600"],
-    category: "Antika Takı",
-    startingPrice: 15000,
-    currentPrice: 42500,
-    minBidIncrement: 500,
-    startTime: "2026-02-20T10:00:00Z",
-    endTime: "2026-03-05T22:00:00Z",
-    status: "active",
-    sellerId: "s1",
-    sellerName: "Antika Dunyasi",
-    totalBids: 28,
-    watchCount: 156,
-  },
-  {
-    id: "2",
-    title: "1967 Ford Mustang Shelby GT500 - Restore Edilmis",
-    description: "Tam restore edilmis klasik Amerikan muscle car",
-    images: ["https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=600"],
-    category: "Klasik Otomobil",
-    startingPrice: 500000,
-    currentPrice: 875000,
-    minBidIncrement: 25000,
-    startTime: "2026-02-18T10:00:00Z",
-    endTime: "2026-03-02T20:00:00Z",
-    status: "active",
-    sellerId: "s2",
-    sellerName: "Klasik Motor",
-    totalBids: 15,
-    watchCount: 342,
-  },
-  {
-    id: "3",
-    title: "Rolex Daytona 116500LN - 2024 Model",
-    description: "Kutusunda, garantili Rolex Daytona",
-    images: ["https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=600"],
-    category: "Luks Saat",
-    startingPrice: 750000,
-    currentPrice: 1250000,
-    minBidIncrement: 50000,
-    startTime: "2026-02-22T14:00:00Z",
-    endTime: "2026-03-08T18:00:00Z",
-    status: "active",
-    sellerId: "s3",
-    sellerName: "Saat Galerisi",
-    totalBids: 12,
-    watchCount: 521,
-  },
-  {
-    id: "4",
-    title: "Yagli Boya Tablo - Istanbul Bogazi Manzarasi",
-    description: "Unlu Turk ressamin orijinal Istanbul Bogazi tablosu",
-    images: ["https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600"],
-    category: "Sanat",
-    startingPrice: 25000,
-    currentPrice: 68000,
-    minBidIncrement: 2500,
-    startTime: "2026-02-24T10:00:00Z",
-    endTime: "2026-03-10T22:00:00Z",
-    status: "active",
-    sellerId: "s4",
-    sellerName: "Sanat Evi",
-    totalBids: 19,
-    watchCount: 203,
-  },
+const categoryIcons: Record<string, typeof Gem> = {
+  jewelry: Gem,
+  watches: Watch,
+  cars: Car,
+  art: Palette,
+  property: HomeIcon,
+  electronics: Smartphone,
+};
+
+const defaultCategories = [
+  { id: "jewelry", name: "Mucevher", icon: Gem },
+  { id: "watches", name: "Luks Saat", icon: Watch },
+  { id: "cars", name: "Klasik Otomobil", icon: Car },
+  { id: "art", name: "Sanat", icon: Palette },
+  { id: "property", name: "Gayrimenkul", icon: HomeIcon },
+  { id: "electronics", name: "Elektronik", icon: Smartphone },
 ];
 
-const mockUpcomingAuctions: AuctionItem[] = [
-  {
-    id: "5",
-    title: "Elmas Yuzuk - 3.5 Karat Oval Kesim",
-    description: "GIA sertifikali 3.5 karat oval kesim elmas yuzuk",
-    images: ["https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600"],
-    category: "Mucevher",
-    startingPrice: 200000,
-    currentPrice: 200000,
-    minBidIncrement: 10000,
-    startTime: "2026-03-01T14:00:00Z",
-    endTime: "2026-03-15T20:00:00Z",
-    status: "upcoming",
-    sellerId: "s5",
-    sellerName: "Mucevher Sarayi",
-    totalBids: 0,
-    watchCount: 89,
-  },
-  {
-    id: "6",
-    title: "Antika Hali - 19. Yuzyil Hereke",
-    description: "El dokuması Hereke halisi, mükemmel durumda",
-    images: ["https://images.unsplash.com/photo-1600166898405-da9535204843?w=600"],
-    category: "Antika",
-    startingPrice: 85000,
-    currentPrice: 85000,
-    minBidIncrement: 5000,
-    startTime: "2026-03-03T10:00:00Z",
-    endTime: "2026-03-17T22:00:00Z",
-    status: "upcoming",
-    sellerId: "s6",
-    sellerName: "Hali Dunyasi",
-    totalBids: 0,
-    watchCount: 67,
-  },
-];
+function AuctionCardSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <div className="aspect-[4/3] animate-pulse bg-[var(--muted)]" />
+      <CardContent className="p-4 space-y-3">
+        <div className="h-3 w-20 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-full animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="flex justify-between">
+          <div className="h-5 w-24 animate-pulse rounded bg-[var(--muted)]" />
+          <div className="h-5 w-16 animate-pulse rounded bg-[var(--muted)]" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-const categories = [
-  { id: "jewelry", name: "Mucevher", icon: Gem, count: 234 },
-  { id: "watches", name: "Luks Saat", icon: Watch, count: 156 },
-  { id: "cars", name: "Klasik Otomobil", icon: Car, count: 89 },
-  { id: "art", name: "Sanat", icon: Palette, count: 312 },
-  { id: "property", name: "Gayrimenkul", icon: HomeIcon, count: 67 },
-  { id: "electronics", name: "Elektronik", icon: Smartphone, count: 178 },
-];
+function UpcomingAuctionSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-col sm:flex-row">
+        <div className="aspect-square w-full sm:w-48 shrink-0 animate-pulse bg-[var(--muted)]" />
+        <CardContent className="flex flex-1 flex-col justify-between p-4 space-y-3">
+          <div className="space-y-2">
+            <div className="h-3 w-20 animate-pulse rounded bg-[var(--muted)]" />
+            <div className="h-4 w-full animate-pulse rounded bg-[var(--muted)]" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-24 animate-pulse rounded bg-[var(--muted)]" />
+            <div className="h-6 w-32 animate-pulse rounded bg-[var(--muted)]" />
+          </div>
+        </CardContent>
+      </div>
+    </Card>
+  );
+}
 
 export default function HomePage() {
   const locale = useLocale();
   const t = useTranslations("home");
   const tCommon = useTranslations("common");
+
+  const { data: featuredAuctions, isLoading: featuredLoading } = useFeaturedAuctions();
+  const { data: upcomingAuctions, isLoading: upcomingLoading } = useUpcomingAuctions();
+  const { data: apiCategories } = useAuctionCategories();
+
+  const categories = apiCategories?.map((cat) => ({
+    ...cat,
+    icon: categoryIcons[cat.id] || Gem,
+  })) || defaultCategories;
+
+  const heroAuction = featuredAuctions?.[0];
 
   return (
     <div>
@@ -213,42 +161,56 @@ export default function HomePage() {
             <div className="hidden lg:block">
               <div className="relative">
                 <div className="absolute -inset-4 rounded-2xl bg-gradient-to-r from-primary-500/20 to-primary-400/10 blur-xl" />
-                <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur-sm">
-                  <div className="relative aspect-[4/3]">
-                    <Image
-                      src="https://images.unsplash.com/photo-1515562141589-67f0d569b6c6?w=800"
-                      alt="One cikan muzayede"
-                      fill
-                      className="object-cover"
-                      priority
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    <Badge variant="live" className="absolute left-4 top-4">
-                      CANLI
-                    </Badge>
-                  </div>
-                  <CardContent className="p-5 text-white">
-                    <p className="text-xs uppercase tracking-wider text-primary-400">
-                      Antika Taki
-                    </p>
-                    <h3 className="mt-1 font-display text-lg font-semibold">
-                      Osmanli Donemi Altin Kupe Seti
-                    </h3>
-                    <div className="mt-3 flex items-end justify-between">
-                      <div>
-                        <p className="text-xs text-gray-400">Guncel Fiyat</p>
-                        <p className="text-2xl font-bold text-primary-400">
-                          {formatCurrency(42500)}
-                        </p>
-                      </div>
-                      <CountdownTimer
-                        endDate="2026-03-05T22:00:00Z"
-                        compact
-                        showIcon
+                {heroAuction ? (
+                  <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur-sm">
+                    <div className="relative aspect-[4/3]">
+                      <AuctionImage
+                        src={heroAuction.images?.[0]}
+                        alt={heroAuction.title}
+                        fill
+                        className="object-cover"
+                        priority
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <Badge variant="live" className="absolute left-4 top-4">
+                        CANLI
+                      </Badge>
                     </div>
-                  </CardContent>
-                </Card>
+                    <CardContent className="p-5 text-white">
+                      <p className="text-xs uppercase tracking-wider text-primary-400">
+                        {heroAuction.category}
+                      </p>
+                      <h3 className="mt-1 font-display text-lg font-semibold">
+                        {heroAuction.title}
+                      </h3>
+                      <div className="mt-3 flex items-end justify-between">
+                        <div>
+                          <p className="text-xs text-gray-400">Guncel Fiyat</p>
+                          <p className="text-2xl font-bold text-primary-400">
+                            {formatCurrency(heroAuction.currentPrice)}
+                          </p>
+                        </div>
+                        <CountdownTimer
+                          endDate={heroAuction.endTime}
+                          compact
+                          showIcon
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur-sm">
+                    <div className="aspect-[4/3] animate-pulse bg-white/10" />
+                    <CardContent className="p-5 space-y-3">
+                      <div className="h-3 w-20 animate-pulse rounded bg-white/10" />
+                      <div className="h-5 w-full animate-pulse rounded bg-white/10" />
+                      <div className="flex justify-between">
+                        <div className="h-8 w-32 animate-pulse rounded bg-white/10" />
+                        <div className="h-6 w-20 animate-pulse rounded bg-white/10" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </div>
@@ -305,9 +267,22 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {mockFeaturedAuctions.map((auction) => (
-            <AuctionCard key={auction.id} auction={auction} />
-          ))}
+          {featuredLoading ? (
+            <>
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+            </>
+          ) : featuredAuctions && featuredAuctions.length > 0 ? (
+            featuredAuctions.map((auction) => (
+              <AuctionCard key={auction.id} auction={auction} />
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12 text-[var(--muted-foreground)]">
+              Henuz one cikan muzayede bulunmuyor.
+            </div>
+          )}
         </div>
 
         <div className="mt-6 text-center sm:hidden">
@@ -333,27 +308,32 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/${locale}/auctions?category=${category.id}`}
-              >
-                <Card
-                  hover
-                  className="group flex flex-col items-center p-6 text-center"
+            {categories.map((category) => {
+              const IconComponent = category.icon;
+              return (
+                <Link
+                  key={category.id}
+                  href={`/${locale}/auctions?category=${category.id}`}
                 >
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-primary-500/10 transition-colors group-hover:bg-primary-500 group-hover:text-white">
-                    <category.icon className="h-7 w-7 text-primary-500 group-hover:text-white" />
-                  </div>
-                  <h3 className="font-display text-sm font-semibold">
-                    {category.name}
-                  </h3>
-                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    {category.count} muzayede
-                  </p>
-                </Card>
-              </Link>
-            ))}
+                  <Card
+                    hover
+                    className="group flex flex-col items-center p-6 text-center"
+                  >
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-primary-500/10 transition-colors group-hover:bg-primary-500 group-hover:text-white">
+                      <IconComponent className="h-7 w-7 text-primary-500 group-hover:text-white" />
+                    </div>
+                    <h3 className="font-display text-sm font-semibold">
+                      {category.name}
+                    </h3>
+                    {"count" in category && (
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        {(category as { count?: number }).count} muzayede
+                      </p>
+                    )}
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -379,49 +359,61 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {mockUpcomingAuctions.map((auction) => (
-            <Card key={auction.id} hover className="overflow-hidden">
-              <div className="flex flex-col sm:flex-row">
-                <div className="relative aspect-square w-full sm:w-48 shrink-0">
-                  <Image
-                    src={auction.images[0]}
-                    alt={auction.title}
-                    fill
-                    className="object-cover"
-                  />
-                  <Badge variant="secondary" className="absolute left-3 top-3">
-                    <Clock className="mr-1 h-3 w-3" />
-                    Yakinda
-                  </Badge>
-                </div>
-                <CardContent className="flex flex-1 flex-col justify-between p-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-primary-500">
-                      {auction.category}
-                    </p>
-                    <h3 className="mt-1 font-display text-base font-semibold line-clamp-2">
-                      {auction.title}
-                    </h3>
+          {upcomingLoading ? (
+            <>
+              <UpcomingAuctionSkeleton />
+              <UpcomingAuctionSkeleton />
+            </>
+          ) : upcomingAuctions && upcomingAuctions.length > 0 ? (
+            upcomingAuctions.map((auction) => (
+              <Card key={auction.id} hover className="overflow-hidden">
+                <div className="flex flex-col sm:flex-row">
+                  <div className="relative aspect-square w-full sm:w-48 shrink-0">
+                    <AuctionImage
+                      src={auction.images?.[0]}
+                      alt={auction.title}
+                      fill
+                      className="object-cover"
+                      compact
+                    />
+                    <Badge variant="secondary" className="absolute left-3 top-3">
+                      <Clock className="mr-1 h-3 w-3" />
+                      Yakinda
+                    </Badge>
                   </div>
-                  <div className="mt-3">
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      Baslangic Fiyati
-                    </p>
-                    <p className="text-lg font-bold text-primary-500">
-                      {formatCurrency(auction.startingPrice)}
-                    </p>
-                    <div className="mt-2">
-                      <CountdownTimer
-                        endDate={auction.startTime}
-                        compact
-                        showIcon
-                      />
+                  <CardContent className="flex flex-1 flex-col justify-between p-4">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wider text-primary-500">
+                        {auction.category}
+                      </p>
+                      <h3 className="mt-1 font-display text-base font-semibold line-clamp-2">
+                        {auction.title}
+                      </h3>
                     </div>
-                  </div>
-                </CardContent>
-              </div>
-            </Card>
-          ))}
+                    <div className="mt-3">
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Baslangic Fiyati
+                      </p>
+                      <p className="text-lg font-bold text-primary-500">
+                        {formatCurrency(auction.startingPrice)}
+                      </p>
+                      <div className="mt-2">
+                        <CountdownTimer
+                          endDate={auction.startTime}
+                          compact
+                          showIcon
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </div>
+              </Card>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12 text-[var(--muted-foreground)]">
+              Yaklasan muzayede bulunmuyor.
+            </div>
+          )}
         </div>
       </section>
 

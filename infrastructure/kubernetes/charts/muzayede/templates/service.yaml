@@ -5,22 +5,17 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name }}
-  namespace: {{ $.Values.global.namespace }}
+  namespace: {{ include "muzayede.namespace" $ }}
   labels:
-    app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-    app.kubernetes.io/part-of: muzayede
-    environment: {{ $.Values.global.environment }}
+    {{- include "muzayede.labels" (dict "name" $name "context" $) | nindent 4 }}
 spec:
   type: {{ $svc.service.type }}
   ports:
     - port: {{ $svc.service.port }}
-      targetPort: http
+      targetPort: {{ $svc.service.targetPort | default $svc.containerPort }}
       protocol: TCP
       name: http
   selector:
-    app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
+    {{- include "muzayede.selectorLabels" (dict "name" $name "context" $) | nindent 4 }}
 {{- end }}
 {{- end }}

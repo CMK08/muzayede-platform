@@ -11,23 +11,103 @@ export class FaqService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(category?: string, publicOnly = true) {
-    this.logger.log(`Listing FAQs: category=${category || 'all'}, publicOnly=${publicOnly}`);
+  async findAll(query?: {
+    category?: string;
+    page?: number;
+    limit?: number;
+    publicOnly?: boolean;
+  }) {
+    this.logger.log(`Listing FAQs: ${JSON.stringify(query || {})}`);
+
+    const page = query?.page || 1;
+    const limit = query?.limit || 20;
+    const skip = (page - 1) * limit;
+    const publicOnly = query?.publicOnly ?? true;
 
     const where: any = {};
 
-    if (category) {
-      where.category = category;
+    if (query?.category) {
+      where.category = query.category;
     }
 
     if (publicOnly) {
       where.isActive = true;
     }
 
-    return this.prisma.faq.findMany({
-      where,
+    const [faqs, total] = await Promise.all([
+      this.prisma.faq.findMany({
+        where,
+        orderBy: { sortOrder: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.faq.count({ where }),
+    ]);
+
+    return {
+      data: faqs,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findOne(id: string) {
+    this.logger.log(`Getting FAQ: ${id}`);
+
+    const faq = await this.prisma.faq.findUnique({ where: { id } });
+    if (!faq) {
+      throw new NotFoundException(`FAQ with ID '${id}' not found`);
+    }
+
+    return faq;
+  }
+
+  async getGroupedByCategory() {
+    this.logger.log('Getting FAQs grouped by category');
+
+    const faqs = await this.prisma.faq.findMany({
+      where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+
+    const grouped: Record<string, typeof faqs> = {};
+
+    for (const faq of faqs) {
+      const category = faq.category || 'Genel';
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+      grouped[category].push(faq);
+    }
+
+    return {
+      data: Object.entries(grouped).map(([category, items]) => ({
+        category,
+        count: items.length,
+        items,
+      })),
+    };
+  }
+
+  async getCategories() {
+    this.logger.log('Getting FAQ categories');
+
+    const faqs = await this.prisma.faq.findMany({
+      where: { isActive: true },
+      select: { category: true },
+      distinct: ['category'],
+      orderBy: { category: 'asc' },
+    });
+
+    return {
+      data: faqs
+        .map((f) => f.category)
+        .filter((c): c is string => c !== null),
+    };
   }
 
   async create(dto: {
@@ -57,6 +137,7 @@ export class FaqService {
       answer?: string;
       category?: string;
       sortOrder?: number;
+      isActive?: boolean;
     },
   ) {
     this.logger.log(`Updating FAQ: ${id}`);
@@ -73,6 +154,7 @@ export class FaqService {
         ...(dto.answer !== undefined && { answer: dto.answer }),
         ...(dto.category !== undefined && { category: dto.category }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
   }

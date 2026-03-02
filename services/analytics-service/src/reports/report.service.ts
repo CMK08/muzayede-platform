@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface ReportResult {
+export interface ReportResult {
   reportId: string;
   type: string;
   period: { from: string; to: string };

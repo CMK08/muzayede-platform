@@ -1,0 +1,444 @@
+###############################################################################
+# Helm values for kube-prometheus-stack
+# Install: helm install monitoring prometheus-community/kube-prometheus-stack \
+#            -n monitoring -f prometheus-values.yaml
+###############################################################################
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+fullnameOverride: muzayede-monitoring
+
+# ---------------------------------------------------------------------------
+# Prometheus
+# ---------------------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    retention: 30d
+    retentionSize: "50GB"
+    replicas: 2
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "2"
+        memory: "8Gi"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi
+    # Scrape all namespaces for ServiceMonitors
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    # Additional scrape configs for service discovery
+    additionalScrapeConfigs: []
+
+# ---------------------------------------------------------------------------
+# Alertmanager
+# ---------------------------------------------------------------------------
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "namespace", "service"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: "slack-notifications"
+      routes:
+        - match:
+            severity: critical
+          receiver: "slack-critical"
+          repeat_interval: 1h
+        - match:
+            severity: warning
+          receiver: "slack-notifications"
+    receivers:
+      - name: "slack-notifications"
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook-url
+            channel: "#muzayede-alerts"
+            title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+            text: '{{ range .Alerts }}*{{ .Labels.service }}* in *{{ .Labels.namespace }}*: {{ .Annotations.description }}{{ end }}'
+      - name: "slack-critical"
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook-url
+            channel: "#muzayede-alerts-critical"
+            title: '[CRITICAL] {{ .CommonLabels.alertname }}'
+            text: '{{ range .Alerts }}*{{ .Labels.service }}* in *{{ .Labels.namespace }}*: {{ .Annotations.description }}{{ end }}'
+
+# ---------------------------------------------------------------------------
+# Grafana
+# ---------------------------------------------------------------------------
+grafana:
+  enabled: true
+  replicas: 1
+  adminPassword: "" # Set via secret in production
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 10Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - grafana.muzayede.com
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.muzayede.com
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "muzayede"
+          orgId: 1
+          folder: "Muzayede Platform"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/muzayede
+  dashboardsConfigMaps:
+    muzayede: muzayede-grafana-dashboards
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://muzayede-monitoring-prometheus:9090
+          access: proxy
+          isDefault: true
+
+# ---------------------------------------------------------------------------
+# Node Exporter
+# ---------------------------------------------------------------------------
+nodeExporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+# ---------------------------------------------------------------------------
+# kube-state-metrics
+# ---------------------------------------------------------------------------
+kubeStateMetrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+# ---------------------------------------------------------------------------
+# Prometheus Rules (alerts)
+# ---------------------------------------------------------------------------
+additionalPrometheusRulesMap:
+  muzayede-alerts:
+    groups:
+      - name: muzayede-service-health
+        rules:
+          - alert: ServiceDown
+            expr: up{namespace=~"muzayede-.*"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "{{ $labels.job }} in {{ $labels.namespace }} has been down for more than 2 minutes."
+
+          - alert: HighErrorRate
+            expr: |
+              (
+                sum(rate(http_requests_total{namespace=~"muzayede-.*", status=~"5.."}[5m])) by (service, namespace)
+                /
+                sum(rate(http_requests_total{namespace=~"muzayede-.*"}[5m])) by (service, namespace)
+              ) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High error rate on {{ $labels.service }}"
+              description: "{{ $labels.service }} in {{ $labels.namespace }} has >5% error rate for 5 minutes."
+
+          - alert: HighLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_request_duration_seconds_bucket{namespace=~"muzayede-.*"}[5m])) by (le, service, namespace)
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High latency on {{ $labels.service }}"
+              description: "{{ $labels.service }} p95 latency > 2s for 5 minutes."
+
+          - alert: PodCrashLooping
+            expr: |
+              rate(kube_pod_container_status_restarts_total{namespace=~"muzayede-.*"}[15m]) > 0
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash-looping"
+              description: "{{ $labels.pod }} in {{ $labels.namespace }} restarted more than once in 15 minutes."
+
+          - alert: HighMemoryUsage
+            expr: |
+              (
+                container_memory_working_set_bytes{namespace=~"muzayede-.*"}
+                /
+                container_spec_memory_limit_bytes{namespace=~"muzayede-.*"}
+              ) > 0.85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.pod }}"
+              description: "{{ $labels.pod }} is using >85% of its memory limit."
+
+# ---------------------------------------------------------------------------
+# ServiceMonitors for all 14 Muzayede microservices
+# ---------------------------------------------------------------------------
+
+# ServiceMonitors are created as additionalServiceMonitors so the
+# kube-prometheus-stack operator picks them up automatically.
+
+additionalServiceMonitors:
+  - name: api-gateway
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: api-gateway
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: auth-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: auth-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: user-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: user-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: auction-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: auction-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: bid-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: bid-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: product-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: product-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: notification-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: notification-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: search-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: search-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: payment-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: payment-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: shipping-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: shipping-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: live-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: live-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: ai-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: ai-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: blockchain-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: blockchain-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: analytics-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: analytics-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+
+  - name: cms-service
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: cms-service
+    namespaceSelector:
+      matchNames:
+        - muzayede-production
+        - muzayede-staging
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s

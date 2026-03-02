@@ -12,7 +12,7 @@ import { NftService } from './nft.service';
 
 @ApiTags('nft')
 @ApiBearerAuth()
-@Controller('nft')
+@Controller('blockchain/nft')
 export class NftController {
   constructor(private readonly nftService: NftService) {}
 
@@ -39,17 +39,44 @@ export class NftController {
     );
   }
 
+  @Post('lock')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lock an NFT for an active auction' })
+  @ApiResponse({ status: 200, description: 'NFT locked for auction' })
+  async lockForAuction(
+    @Body() body: { tokenId: string; auctionId: string },
+  ) {
+    return this.nftService.lockForAuction(body.tokenId, body.auctionId);
+  }
+
+  @Post('unlock')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unlock an NFT after auction ends' })
+  @ApiResponse({ status: 200, description: 'NFT unlocked from auction' })
+  async unlockFromAuction(
+    @Body() body: { tokenId: string },
+  ) {
+    return this.nftService.unlockFromAuction(body.tokenId);
+  }
+
+  @Get(':tokenId')
+  @ApiOperation({ summary: 'Get NFT metadata and details by token ID' })
+  @ApiResponse({ status: 200, description: 'NFT details returned' })
+  async getTokenDetails(@Param('tokenId') tokenId: string) {
+    return this.nftService.getTokenDetails(tokenId);
+  }
+
+  @Get('product/:productId')
+  @ApiOperation({ summary: 'Get NFT certificate by product ID' })
+  @ApiResponse({ status: 200, description: 'NFT certificate for the product' })
+  async getCertificateByProduct(@Param('productId') productId: string) {
+    return this.nftService.getCertificateByProduct(productId);
+  }
+
   @Get('verify/:certificateId')
   @ApiOperation({ summary: 'Verify an NFT certificate on-chain' })
   @ApiResponse({ status: 200, description: 'Certificate verification result' })
   async verifyCertificate(@Param('certificateId') certificateId: string) {
     return this.nftService.verifyCertificate(certificateId);
-  }
-
-  @Get('provenance/:productId')
-  @ApiOperation({ summary: 'Get provenance chain for a product' })
-  @ApiResponse({ status: 200, description: 'Provenance chain timeline' })
-  async getProvenanceChain(@Param('productId') productId: string) {
-    return this.nftService.getProvenanceChain(productId);
   }
 }

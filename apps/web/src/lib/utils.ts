@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, type Locale } from "date-fns";
 import { tr, enUS, ar } from "date-fns/locale";
 
 export function cn(...inputs: ClassValue[]) {
@@ -54,7 +54,13 @@ export function getTimeRemaining(endDate: string | Date): {
   total: number;
   isExpired: boolean;
 } {
+  if (!endDate) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0, isExpired: true };
+  }
   const end = typeof endDate === "string" ? new Date(endDate) : endDate;
+  if (isNaN(end.getTime())) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0, isExpired: true };
+  }
   const total = end.getTime() - Date.now();
 
   if (total <= 0) {

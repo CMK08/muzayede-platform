@@ -5,7 +5,7 @@ interface PublicLayoutProps {
   children: React.ReactNode;
 }
 
-export default function PublicLayout({ children }: PublicLayoutProps) {
+export default function PublicLayout({ children }: PublicLayoutProps): React.JSX.Element {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />

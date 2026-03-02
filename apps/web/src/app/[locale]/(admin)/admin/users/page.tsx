@@ -6,12 +6,10 @@ import {
   Eye,
   Edit,
   Ban,
-  Trash2,
   Download,
   Shield,
   ShieldCheck,
   UserPlus,
-  MoreVertical,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -27,9 +25,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils";
+import { useAdminUsers } from "@/hooks/use-dashboard";
 
 interface UserRecord {
   id: string;
@@ -242,7 +240,31 @@ export default function AdminUsersPage() {
   }>({ open: false, user: null });
   const [blacklistReason, setBlacklistReason] = useState("");
 
-  const filteredData = mockUsers.filter((user) => {
+  const { data: usersResponse } = useAdminUsers({
+    page: currentPage,
+    limit: pageSize,
+    search: search || "",
+    role: roleFilter || "",
+  });
+
+  const apiUsers: UserRecord[] = (usersResponse?.data || []).map((u: Record<string, unknown>) => ({
+    id: u.id as string,
+    firstName: (u.firstName || "") as string,
+    lastName: (u.lastName || "") as string,
+    email: (u.email || "") as string,
+    phone: (u.phone || "") as string,
+    role: (u.role || "user") as string,
+    isActive: (u.isActive !== false) as boolean,
+    kycStatus: (u.kycStatus || "pending") as string,
+    totalBids: (u.totalBids || 0) as number,
+    totalSpent: (u.totalSpent || 0) as number,
+    joinDate: (u.joinDate || u.createdAt || "") as string,
+    avatar: (u.avatar || null) as string | null,
+  }));
+
+  const allUsers = apiUsers.length > 0 ? apiUsers : mockUsers;
+
+  const filteredData = allUsers.filter((user) => {
     const matchesSearch =
       !search ||
       `${user.firstName} ${user.lastName}`
@@ -411,14 +433,14 @@ export default function AdminUsersPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-          <p className="text-2xl font-bold">{mockUsers.length}</p>
+          <p className="text-2xl font-bold">{allUsers.length}</p>
           <p className="text-xs text-[var(--muted-foreground)]">Toplam Kullanici</p>
         </div>
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-emerald-500" />
             <p className="text-2xl font-bold">
-              {mockUsers.filter((u) => u.kycStatus === "verified").length}
+              {allUsers.filter((u) => u.kycStatus === "verified").length}
             </p>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">KYC Dogrulanmis</p>
@@ -427,14 +449,14 @@ export default function AdminUsersPage() {
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary-500" />
             <p className="text-2xl font-bold">
-              {mockUsers.filter((u) => u.role === "seller").length}
+              {allUsers.filter((u) => u.role === "seller").length}
             </p>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">Satici</p>
         </div>
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <p className="text-2xl font-bold text-red-500">
-            {mockUsers.filter((u) => !u.isActive).length}
+            {allUsers.filter((u) => !u.isActive).length}
           </p>
           <p className="text-xs text-[var(--muted-foreground)]">Pasif Hesap</p>
         </div>

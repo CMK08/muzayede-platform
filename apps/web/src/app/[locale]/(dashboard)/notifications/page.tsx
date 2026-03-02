@@ -8,17 +8,15 @@ import {
   Package,
   CreditCard,
   AlertCircle,
-  CheckCircle2,
   Trophy,
-  TrendingUp,
-  Settings,
   Check,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/hooks/use-dashboard";
 
 interface Notification {
   id: string;
@@ -29,95 +27,6 @@ interface Notification {
   read: boolean;
   link?: string;
 }
-
-const mockNotifications: Notification[] = [
-  {
-    id: "N-001",
-    type: "bid",
-    title: "Teklifiniz asildi!",
-    body: "1967 Ford Mustang Shelby GT500 muzayedesinde teklifiniz asildi. Yeni fiyat: 875.000 TL",
-    timestamp: "2026-02-26T09:30:00Z",
-    read: false,
-    link: "/auctions/AUC-002",
-  },
-  {
-    id: "N-002",
-    type: "auction",
-    title: "Muzayede basliyor",
-    body: "Takip ettiginiz 'Rolex Daytona 116500LN' muzayedesi 1 saat icinde basliyor",
-    timestamp: "2026-02-26T08:00:00Z",
-    read: false,
-    link: "/auctions/AUC-003",
-  },
-  {
-    id: "N-003",
-    type: "bid",
-    title: "Teklif basarili",
-    body: "Osmanli Donemi Altin Kupe Seti muzayedesine 42.500 TL teklif verdiniz",
-    timestamp: "2026-02-25T15:30:00Z",
-    read: true,
-    link: "/auctions/AUC-001",
-  },
-  {
-    id: "N-004",
-    type: "payment",
-    title: "Odeme onaylandi",
-    body: "ORD-2026-001 numarali siparisiniz icin odeme basariyla alindi",
-    timestamp: "2026-02-25T14:00:00Z",
-    read: true,
-  },
-  {
-    id: "N-005",
-    type: "order",
-    title: "Siparisiniz kargoya verildi",
-    body: "Cartier Love Bileklik siparisınız Aras Kargo ile kargoya verildi. Takip No: TR444555666",
-    timestamp: "2026-02-24T16:45:00Z",
-    read: false,
-  },
-  {
-    id: "N-006",
-    type: "auction",
-    title: "Muzayede kazandiniz!",
-    body: "Tebrikler! 'Yagli Boya Tablo - Istanbul Bogazi' muzayedesini 68.000 TL ile kazandiniz",
-    timestamp: "2026-02-15T22:01:00Z",
-    read: true,
-    link: "/auctions/AUC-004",
-  },
-  {
-    id: "N-007",
-    type: "system",
-    title: "Hosgeldiniz!",
-    body: "Muzayede platformuna hosgeldiniz. Profilinizi tamamlayin ve muzayedelere katilmaya baslayin.",
-    timestamp: "2026-02-10T10:00:00Z",
-    read: true,
-  },
-  {
-    id: "N-008",
-    type: "bid",
-    title: "Otomatik teklif verildi",
-    body: "Antika Osmanli Hancer muzayedesinde otomatik teklifiniz 35.000 TL olarak verildi",
-    timestamp: "2026-02-23T16:30:00Z",
-    read: true,
-    link: "/auctions/AUC-006",
-  },
-  {
-    id: "N-009",
-    type: "system",
-    title: "KYC dogrulamaniz onaylandi",
-    body: "Kimlik dogrulamaniz basariyla tamamlandi. Artik tum muzayedelere katilabilirsiniz.",
-    timestamp: "2026-02-12T11:00:00Z",
-    read: true,
-  },
-  {
-    id: "N-010",
-    type: "auction",
-    title: "Muzayede sona erdi",
-    body: "Mercedes-Benz 300SL Gullwing muzayedesi sona erdi. Maalesef kazanan olamadınız.",
-    timestamp: "2026-02-10T22:01:00Z",
-    read: true,
-    link: "/auctions/AUC-010",
-  },
-];
 
 const typeConfig: Record<
   string,
@@ -157,8 +66,30 @@ const typeConfig: Record<
 
 export default function NotificationsPage() {
   const t = useTranslations("common");
-  const [notifications, setNotifications] = useState(mockNotifications);
+  void t; // TODO: replace hardcoded strings with t() calls
+  const { data: notificationsData, isLoading } = useNotifications(1, 50);
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
   const [typeFilter, setTypeFilter] = useState("");
+
+  const apiNotifications: Notification[] = (notificationsData?.data || []).map((n: Record<string, unknown>) => ({
+    id: n.id as string,
+    type: (n.type || "system") as Notification["type"],
+    title: (n.title || "") as string,
+    body: (n.body || n.message || "") as string,
+    timestamp: (n.timestamp || n.createdAt || "") as string,
+    read: (n.read || n.isRead || false) as boolean,
+    link: (n.link || undefined) as string | undefined,
+  }));
+
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Sync API data
+  React.useEffect(() => {
+    if (apiNotifications.length > 0) {
+      setNotifications(apiNotifications);
+    }
+  }, [notificationsData]);
 
   const filteredNotifications = notifications.filter(
     (n) => !typeFilter || n.type === typeFilter
@@ -167,12 +98,14 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const markAsRead = (id: string) => {
+    markReadMutation.mutate(id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
   const markAllAsRead = () => {
+    markAllReadMutation.mutate();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
@@ -239,7 +172,11 @@ export default function NotificationsPage() {
       </div>
 
       {/* Notifications List */}
-      {Object.keys(grouped).length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+        </div>
+      ) : Object.keys(grouped).length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Bell className="h-16 w-16 text-[var(--muted-foreground)]" />

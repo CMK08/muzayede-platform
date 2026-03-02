@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface EscrowRecord {
+export interface EscrowRecord {
   id: string;
   orderId: string;
   sellerId: string;
@@ -179,6 +179,61 @@ export class EscrowService {
       holdUntil: new Date(),
       createdAt: payment.createdAt,
       releasedAt: new Date(),
+    };
+  }
+
+  /**
+   * Refund escrow to buyer. Alias for handleDispute with refund semantics.
+   */
+  async refundEscrow(escrowId: string, reason: string): Promise<EscrowRecord> {
+    return this.handleDispute(escrowId, reason);
+  }
+
+  /**
+   * Get escrow status for an order.
+   */
+  async getEscrowStatus(orderId: string): Promise<EscrowRecord | null> {
+    this.logger.log(`Getting escrow status for order: ${orderId}`);
+
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        orderId,
+        method: 'ESCROW',
+      },
+      include: { order: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`No escrow found for order ${orderId}`);
+    }
+
+    const statusMap: Record<string, EscrowRecord['status']> = {
+      PROCESSING: 'held',
+      PENDING: 'held',
+      COMPLETED: 'released',
+      FAILED: 'refunded',
+      REFUNDED: 'refunded',
+    };
+
+    const escrowStatus = statusMap[payment.status] || 'held';
+    const holdUntil = new Date(payment.createdAt);
+    holdUntil.setDate(holdUntil.getDate() + this.DISPUTE_PERIOD_DAYS);
+
+    return {
+      id: payment.id,
+      orderId: payment.orderId,
+      sellerId: payment.order.sellerId,
+      amount: Number(payment.amount),
+      status: escrowStatus,
+      releaseConditions: {
+        buyerConfirmed: escrowStatus === 'released',
+        deliveryConfirmed: escrowStatus === 'released',
+        disputePeriodExpired: new Date() > holdUntil,
+      },
+      holdUntil,
+      createdAt: payment.createdAt,
+      releasedAt: payment.paidAt || undefined,
     };
   }
 

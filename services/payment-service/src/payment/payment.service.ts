@@ -249,7 +249,7 @@ export class PaymentService {
 
       try {
         await this.invoiceService.generateInvoice(payment.orderId);
-      } catch (err) {
+      } catch (err: any) {
         this.logger.error(`Invoice generation failed: ${err.message}`);
       }
 
@@ -525,7 +525,7 @@ export class PaymentService {
           netAmount: Number(payout.netAmount),
           status: 'PROCESSING',
         });
-      } catch (err) {
+      } catch (err: any) {
         this.logger.error(
           `Failed to process payout ${payout.id}: ${err.message}`,
         );

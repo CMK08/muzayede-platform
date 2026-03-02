@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import {
@@ -18,115 +18,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuctionCard } from "@/components/auction/auction-card";
 import { cn } from "@/lib/utils";
-import type { AuctionItem } from "@/stores/auction-store";
+import { useAuctions, useAuctionCategories } from "@/hooks/use-auction";
 
-// Mock auction data
-const mockAuctions: AuctionItem[] = [
-  {
-    id: "1",
-    title: "Osmanli Donemi Altin Kupe Seti - 18. Yuzyil",
-    description: "Nadir bulunan Osmanli donemi el isciliginde altin kupe seti",
-    images: ["https://images.unsplash.com/photo-1515562141589-67f0d569b6c6?w=600"],
-    category: "Antika Taki",
-    startingPrice: 15000,
-    currentPrice: 42500,
-    minBidIncrement: 500,
-    startTime: "2026-02-20T10:00:00Z",
-    endTime: "2026-03-05T22:00:00Z",
-    status: "active",
-    sellerId: "s1",
-    sellerName: "Antika Dunyasi",
-    totalBids: 28,
-    watchCount: 156,
-  },
-  {
-    id: "2",
-    title: "1967 Ford Mustang Shelby GT500",
-    description: "Tam restore edilmis klasik Amerikan muscle car",
-    images: ["https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=600"],
-    category: "Klasik Otomobil",
-    startingPrice: 500000,
-    currentPrice: 875000,
-    minBidIncrement: 25000,
-    startTime: "2026-02-18T10:00:00Z",
-    endTime: "2026-03-02T20:00:00Z",
-    status: "ending_soon",
-    sellerId: "s2",
-    sellerName: "Klasik Motor",
-    totalBids: 15,
-    watchCount: 342,
-  },
-  {
-    id: "3",
-    title: "Rolex Daytona 116500LN - 2024",
-    description: "Kutusunda, garantili Rolex Daytona",
-    images: ["https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=600"],
-    category: "Luks Saat",
-    startingPrice: 750000,
-    currentPrice: 1250000,
-    minBidIncrement: 50000,
-    startTime: "2026-02-22T14:00:00Z",
-    endTime: "2026-03-08T18:00:00Z",
-    status: "active",
-    sellerId: "s3",
-    sellerName: "Saat Galerisi",
-    totalBids: 12,
-    watchCount: 521,
-  },
-  {
-    id: "4",
-    title: "Yagli Boya Tablo - Istanbul Bogazi",
-    description: "Unlu Turk ressamin orijinal Istanbul Bogazi tablosu",
-    images: ["https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=600"],
-    category: "Sanat",
-    startingPrice: 25000,
-    currentPrice: 68000,
-    minBidIncrement: 2500,
-    startTime: "2026-02-24T10:00:00Z",
-    endTime: "2026-03-10T22:00:00Z",
-    status: "active",
-    sellerId: "s4",
-    sellerName: "Sanat Evi",
-    totalBids: 19,
-    watchCount: 203,
-  },
-  {
-    id: "5",
-    title: "Elmas Yuzuk - 3.5 Karat Oval Kesim",
-    description: "GIA sertifikali oval kesim elmas",
-    images: ["https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600"],
-    category: "Mucevher",
-    startingPrice: 200000,
-    currentPrice: 200000,
-    minBidIncrement: 10000,
-    startTime: "2026-03-01T14:00:00Z",
-    endTime: "2026-03-15T20:00:00Z",
-    status: "upcoming",
-    sellerId: "s5",
-    sellerName: "Mucevher Sarayi",
-    totalBids: 0,
-    watchCount: 89,
-  },
-  {
-    id: "6",
-    title: "Antika Hali - 19. Yuzyil Hereke",
-    description: "El dokuması Hereke halisi",
-    images: ["https://images.unsplash.com/photo-1600166898405-da9535204843?w=600"],
-    category: "Antika",
-    startingPrice: 85000,
-    currentPrice: 85000,
-    minBidIncrement: 5000,
-    startTime: "2026-03-03T10:00:00Z",
-    endTime: "2026-03-17T22:00:00Z",
-    status: "upcoming",
-    sellerId: "s6",
-    sellerName: "Hali Dunyasi",
-    totalBids: 0,
-    watchCount: 67,
-  },
-];
-
-const allCategories = [
+const defaultCategories = [
   "Antika Taki",
   "Klasik Otomobil",
   "Luks Saat",
@@ -152,6 +46,23 @@ const sortOptions = [
   { value: "most_bids", label: "En Cok Teklif" },
 ];
 
+function AuctionCardSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <div className="aspect-[4/3] animate-pulse bg-[var(--muted)]" />
+      <CardContent className="p-4 space-y-3">
+        <div className="h-3 w-20 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-full animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="flex justify-between">
+          <div className="h-5 w-24 animate-pulse rounded bg-[var(--muted)]" />
+          <div className="h-5 w-16 animate-pulse rounded bg-[var(--muted)]" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AuctionsPage() {
   const t = useTranslations("auction");
   const searchParams = useSearchParams();
@@ -169,65 +80,24 @@ export default function AuctionsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const filteredAuctions = useMemo(() => {
-    let results = [...mockAuctions];
+  const { data: apiCategories } = useAuctionCategories();
+  const allCategories = apiCategories?.map((c) => c.name) || defaultCategories;
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      results = results.filter(
-        (a) =>
-          a.title.toLowerCase().includes(query) ||
-          a.description.toLowerCase().includes(query) ||
-          a.category.toLowerCase().includes(query)
-      );
-    }
+  const { data: auctionsData, isLoading, isError } = useAuctions({
+    page: currentPage,
+    limit: 12,
+    search: searchQuery || undefined,
+    category: selectedCategories.length > 0 ? selectedCategories[0] : undefined,
+    status: selectedStatus.length > 0 ? selectedStatus[0] : undefined,
+    minPrice: minPrice ? Number(minPrice) : undefined,
+    maxPrice: maxPrice ? Number(maxPrice) : undefined,
+    sort: sortBy,
+  });
 
-    if (selectedCategories.length > 0) {
-      results = results.filter((a) =>
-        selectedCategories.some(
-          (c) =>
-            a.category.toLowerCase().includes(c.toLowerCase()) ||
-            c.toLowerCase().includes(a.category.toLowerCase())
-        )
-      );
-    }
-
-    if (selectedStatus.length > 0) {
-      results = results.filter((a) => selectedStatus.includes(a.status));
-    }
-
-    if (minPrice) {
-      results = results.filter((a) => a.currentPrice >= Number(minPrice));
-    }
-    if (maxPrice) {
-      results = results.filter((a) => a.currentPrice <= Number(maxPrice));
-    }
-
-    switch (sortBy) {
-      case "price_asc":
-        results.sort((a, b) => a.currentPrice - b.currentPrice);
-        break;
-      case "price_desc":
-        results.sort((a, b) => b.currentPrice - a.currentPrice);
-        break;
-      case "most_bids":
-        results.sort((a, b) => b.totalBids - a.totalBids);
-        break;
-      case "ending_soon":
-        results.sort(
-          (a, b) => new Date(a.endTime).getTime() - new Date(b.endTime).getTime()
-        );
-        break;
-      default:
-        results.sort(
-          (a, b) =>
-            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-        );
-    }
-
-    return results;
-  }, [searchQuery, selectedCategories, selectedStatus, minPrice, maxPrice, sortBy]);
+  const auctions = auctionsData?.data || [];
+  const meta = auctionsData?.meta;
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -235,6 +105,7 @@ export default function AuctionsPage() {
         ? prev.filter((c) => c !== category)
         : [...prev, category]
     );
+    setCurrentPage(1);
   };
 
   const toggleStatus = (status: string) => {
@@ -243,6 +114,7 @@ export default function AuctionsPage() {
         ? prev.filter((s) => s !== status)
         : [...prev, status]
     );
+    setCurrentPage(1);
   };
 
   const clearFilters = () => {
@@ -252,6 +124,7 @@ export default function AuctionsPage() {
     setMinPrice("");
     setMaxPrice("");
     setSortBy("newest");
+    setCurrentPage(1);
   };
 
   const hasActiveFilters =
@@ -266,7 +139,7 @@ export default function AuctionsPage() {
       <div className="mb-8">
         <h1 className="font-display text-3xl font-bold">{t("allAuctions")}</h1>
         <p className="mt-2 text-[var(--muted-foreground)]">
-          {filteredAuctions.length} {t("results")}
+          {meta ? `${meta.total} ${t("results")}` : t("results")}
         </p>
       </div>
 
@@ -277,7 +150,10 @@ export default function AuctionsPage() {
             placeholder={t("filters") + "..."}
             icon={<Search className="h-4 w-4" />}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
           />
         </div>
 
@@ -325,6 +201,7 @@ export default function AuctionsPage() {
                       onClick={() => {
                         setSortBy(option.value);
                         setShowSortMenu(false);
+                        setCurrentPage(1);
                       }}
                     >
                       {option.label}
@@ -452,13 +329,19 @@ export default function AuctionsPage() {
                 type="number"
                 placeholder={t("minPrice")}
                 value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
+                onChange={(e) => {
+                  setMinPrice(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
               <Input
                 type="number"
                 placeholder={t("maxPrice")}
                 value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
+                onChange={(e) => {
+                  setMaxPrice(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
             </CardContent>
           </Card>
@@ -500,7 +383,32 @@ export default function AuctionsPage() {
 
         {/* Auction Grid */}
         <div className="flex-1">
-          {filteredAuctions.length === 0 ? (
+          {isLoading ? (
+            <div
+              className={cn(
+                viewMode === "grid"
+                  ? "grid gap-6 sm:grid-cols-2 xl:grid-cols-3"
+                  : "space-y-4"
+              )}
+            >
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+              <AuctionCardSkeleton />
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-20">
+              <Search className="mb-4 h-12 w-12 text-[var(--muted-foreground)]" />
+              <h3 className="font-display text-lg font-semibold">
+                Bir hata olustu
+              </h3>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                Muzayedeler yuklenirken hata olustu. Lutfen tekrar deneyin.
+              </p>
+            </div>
+          ) : auctions.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-20">
               <Search className="mb-4 h-12 w-12 text-[var(--muted-foreground)]" />
               <h3 className="font-display text-lg font-semibold">
@@ -525,7 +433,7 @@ export default function AuctionsPage() {
                   : "space-y-4"
               )}
             >
-              {filteredAuctions.map((auction) => (
+              {auctions.map((auction) => (
                 <AuctionCard
                   key={auction.id}
                   auction={auction}
@@ -536,22 +444,45 @@ export default function AuctionsPage() {
           )}
 
           {/* Pagination */}
-          {filteredAuctions.length > 0 && (
+          {meta && meta.totalPages > 1 && (
             <div className="mt-8 flex items-center justify-center gap-2">
-              <Button variant="outline" size="sm" disabled>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
                 Onceki
               </Button>
-              {[1, 2, 3].map((page) => (
-                <Button
-                  key={page}
-                  variant={page === 1 ? "default" : "outline"}
-                  size="sm"
-                  className="w-10"
-                >
-                  {page}
-                </Button>
-              ))}
-              <Button variant="outline" size="sm">
+              {Array.from({ length: Math.min(meta.totalPages, 5) }, (_, i) => {
+                let page: number;
+                if (meta.totalPages <= 5) {
+                  page = i + 1;
+                } else if (currentPage <= 3) {
+                  page = i + 1;
+                } else if (currentPage >= meta.totalPages - 2) {
+                  page = meta.totalPages - 4 + i;
+                } else {
+                  page = currentPage - 2 + i;
+                }
+                return (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? "default" : "outline"}
+                    size="sm"
+                    className="w-10"
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= meta.totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+              >
                 Sonraki
               </Button>
             </div>

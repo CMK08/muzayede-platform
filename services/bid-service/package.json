@@ -28,7 +28,7 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.0",
     "@muzayede/database": "workspace:*",
-    "@prisma/client": "^5.18.0"
+    "@prisma/client": "^6.3.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.0",

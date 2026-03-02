@@ -26,6 +26,8 @@ export class LabelService {
    * Generate a shipping label for a shipment.
    * Creates a label data structure, generates a unique filename,
    * and updates the shipment with the label URL.
+   *
+   * @deprecated Use CarrierService.generateLabel() instead.
    */
   async generateLabel(shipmentId: string) {
     this.logger.log(`Generating shipping label for shipment: ${shipmentId}`);
@@ -130,7 +132,6 @@ export class LabelService {
 
   /**
    * Generate barcode data string from tracking number.
-   * This would normally encode the tracking number into a barcode format.
    */
   private generateBarcodeData(trackingNumber: string): string {
     const encoded = Buffer.from(trackingNumber).toString('base64');

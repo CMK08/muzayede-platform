@@ -1,20 +1,15 @@
 import { Module } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
-import { IyzicoService } from '../iyzico/iyzico.service';
-import { EscrowService } from '../escrow/escrow.service';
-import { CommissionService } from '../commission/commission.service';
-import { InvoiceService } from '../invoice/invoice.service';
+import { IyzicoModule } from '../iyzico/iyzico.module';
+import { EscrowModule } from '../escrow/escrow.module';
+import { CommissionModule } from '../commission/commission.module';
+import { InvoiceModule } from '../invoice/invoice.module';
 
 @Module({
+  imports: [IyzicoModule, EscrowModule, CommissionModule, InvoiceModule],
   controllers: [PaymentController],
-  providers: [
-    PaymentService,
-    IyzicoService,
-    EscrowService,
-    CommissionService,
-    InvoiceService,
-  ],
-  exports: [PaymentService, CommissionService, InvoiceService, EscrowService],
+  providers: [PaymentService],
+  exports: [PaymentService],
 })
 export class PaymentModule {}

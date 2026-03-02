@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, use } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -17,163 +16,21 @@ import {
   Calendar,
   Eye,
   ZoomIn,
+  Gavel,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BidPanel } from "@/components/auction/bid-panel";
 import { BidHistory } from "@/components/auction/bid-history";
-import { CountdownTimer } from "@/components/auction/countdown-timer";
 import { AuctionCard } from "@/components/auction/auction-card";
-import { useAuctionStore, type Bid, type AuctionItem } from "@/stores/auction-store";
+import { AuctionImage, AuctionImagePlaceholder } from "@/components/auction/auction-image";
+import { useAuctionStore, type AuctionItem } from "@/stores/auction-store";
 import { useAuctionSocket } from "@/hooks/use-socket";
+import { useAuction, } from "@/hooks/use-auction";
+import { useBids } from "@/hooks/use-bids";
+import { useSimilarAuctions } from "@/hooks/use-dashboard";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
-
-// Mock data
-const mockAuction: AuctionItem = {
-  id: "1",
-  title: "Osmanli Donemi Altin Kupe Seti - 18. Yuzyil",
-  description: `Bu essiz Osmanli donemi altin kupe seti, 18. yuzyilin baslarina tarihlenmektedir. El isciligindeki ince detaylar, donemin zanaatkarlik seviyesini gozler onune sermektedir.
-
-Kupeler, 22 ayar saf altindan imal edilmis olup, her biri yaklasik 8 gram agirligindadir. Uzerindeki motifler, Osmanli saray sanatinin tipik orneklerini tasimaktadir.
-
-Tarihi Onemi:
-Bu kupe seti, Osmanli donemi kuyumculuk sanatinin en guzel orneklerinden biridir. Donemin estetik anlayisini ve teknik ustaligini yansitmaktadir.
-
-Durum:
-Urunler antika ozelligine ragmen mukemmel durumda korunmustur. Kutu ve sertifikasi mevcuttur.`,
-  images: [
-    "https://images.unsplash.com/photo-1515562141589-67f0d569b6c6?w=1200",
-    "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=1200",
-    "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=1200",
-    "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=1200",
-  ],
-  category: "Antika Taki",
-  startingPrice: 15000,
-  currentPrice: 42500,
-  minBidIncrement: 500,
-  startTime: "2026-02-20T10:00:00Z",
-  endTime: "2026-03-05T22:00:00Z",
-  status: "active",
-  sellerId: "s1",
-  sellerName: "Antika Dunyasi",
-  totalBids: 28,
-  watchCount: 156,
-  condition: "good",
-  location: "Istanbul, Turkiye",
-  shippingInfo: "Ucretsiz sigortalı kargo ile gonderim yapilmaktadir.",
-};
-
-const mockBids: Bid[] = [
-  {
-    id: "b1",
-    auctionId: "1",
-    bidderId: "u1",
-    bidderName: "Ahm***",
-    amount: 42500,
-    timestamp: "2026-02-26T14:30:00Z",
-    isAutoBid: false,
-  },
-  {
-    id: "b2",
-    auctionId: "1",
-    bidderId: "u2",
-    bidderName: "Meh***",
-    amount: 41000,
-    timestamp: "2026-02-26T14:15:00Z",
-    isAutoBid: true,
-  },
-  {
-    id: "b3",
-    auctionId: "1",
-    bidderId: "u3",
-    bidderName: "Fat***",
-    amount: 39500,
-    timestamp: "2026-02-26T13:45:00Z",
-    isAutoBid: false,
-  },
-  {
-    id: "b4",
-    auctionId: "1",
-    bidderId: "u1",
-    bidderName: "Ahm***",
-    amount: 38000,
-    timestamp: "2026-02-26T12:30:00Z",
-    isAutoBid: false,
-  },
-  {
-    id: "b5",
-    auctionId: "1",
-    bidderId: "u4",
-    bidderName: "Zel***",
-    amount: 35000,
-    timestamp: "2026-02-26T11:00:00Z",
-    isAutoBid: false,
-  },
-  {
-    id: "b6",
-    auctionId: "1",
-    bidderId: "u2",
-    bidderName: "Meh***",
-    amount: 32000,
-    timestamp: "2026-02-25T22:15:00Z",
-    isAutoBid: true,
-  },
-];
-
-const mockSimilarAuctions: AuctionItem[] = [
-  {
-    id: "7",
-    title: "Antika Gumus Bilezik - Selcuklu Donemi",
-    description: "Selcuklu donemi gumus bilezik",
-    images: ["https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600"],
-    category: "Antika Taki",
-    startingPrice: 8000,
-    currentPrice: 18500,
-    minBidIncrement: 250,
-    startTime: "2026-02-21T10:00:00Z",
-    endTime: "2026-03-06T22:00:00Z",
-    status: "active",
-    sellerId: "s7",
-    sellerName: "Taki Koleksiyonu",
-    totalBids: 14,
-    watchCount: 88,
-  },
-  {
-    id: "8",
-    title: "Osmanli Brosu - 19. Yuzyil",
-    description: "19. yuzyil Osmanli donemi altin bros",
-    images: ["https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=600"],
-    category: "Antika Taki",
-    startingPrice: 12000,
-    currentPrice: 29000,
-    minBidIncrement: 500,
-    startTime: "2026-02-23T10:00:00Z",
-    endTime: "2026-03-07T22:00:00Z",
-    status: "active",
-    sellerId: "s8",
-    sellerName: "Antika Hazine",
-    totalBids: 21,
-    watchCount: 112,
-  },
-  {
-    id: "9",
-    title: "Viktorya Donemi Yakut Kolye",
-    description: "Viktorya donemi yakut tasli altin kolye",
-    images: ["https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=600"],
-    category: "Antika Taki",
-    startingPrice: 35000,
-    currentPrice: 62000,
-    minBidIncrement: 1000,
-    startTime: "2026-02-25T10:00:00Z",
-    endTime: "2026-03-09T22:00:00Z",
-    status: "active",
-    sellerId: "s9",
-    sellerName: "Deger Antika",
-    totalBids: 16,
-    watchCount: 178,
-  },
-];
 
 const conditionLabels: Record<string, string> = {
   new: "Sifir",
@@ -187,13 +44,37 @@ interface AuctionDetailPageProps {
   params: Promise<{ id: string; locale: string }>;
 }
 
+function DetailSkeleton() {
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-6 flex items-center gap-2">
+        <div className="h-4 w-20 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-4 animate-pulse rounded bg-[var(--muted)]" />
+        <div className="h-4 w-24 animate-pulse rounded bg-[var(--muted)]" />
+      </div>
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-8">
+          <div className="aspect-[4/3] animate-pulse rounded-xl bg-[var(--muted)]" />
+          <div className="space-y-3">
+            <div className="h-4 w-32 animate-pulse rounded bg-[var(--muted)]" />
+            <div className="h-8 w-full animate-pulse rounded bg-[var(--muted)]" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--muted)]" />
+          </div>
+        </div>
+        <div>
+          <div className="h-96 animate-pulse rounded-xl bg-[var(--muted)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const { id } = use(params);
   const locale = useLocale();
   const t = useTranslations("auction");
-  const tBid = useTranslations("bid");
 
-  const { setCurrentAuction, setBids, currentAuction, bids } =
+  const { setCurrentAuction, setBids, currentAuction, bids: storeBids } =
     useAuctionStore();
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -202,24 +83,61 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
     "description"
   );
 
-  // Initialize with mock data
+  // Fetch auction data from API
+  const { data: auctionData, isLoading: auctionLoading, isError: auctionError } = useAuction(id);
+  const { data: bidsData } = useBids(id);
+  const { data: similarAuctions } = useSimilarAuctions(id);
+
+  // Sync API data to store
   useEffect(() => {
-    setCurrentAuction(mockAuction);
-    setBids(mockBids);
-  }, [id, setCurrentAuction, setBids]);
+    if (auctionData) {
+      setCurrentAuction(auctionData);
+    }
+  }, [auctionData, setCurrentAuction]);
+
+  useEffect(() => {
+    if (bidsData?.data) {
+      setBids(bidsData.data);
+    }
+  }, [bidsData, setBids]);
 
   // Connect to real-time updates
   useAuctionSocket(id);
 
-  const auction = currentAuction || mockAuction;
-  const images = auction.images;
+  const auction = currentAuction || auctionData;
+  const bids = storeBids.length > 0 ? storeBids : (bidsData?.data || []);
+
+  if (auctionLoading) {
+    return <DetailSkeleton />;
+  }
+
+  if (auctionError || !auction) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-20 text-center">
+        <Gavel className="mx-auto h-16 w-16 text-[var(--muted-foreground)]" />
+        <h2 className="mt-4 font-display text-2xl font-bold">Muzayede Bulunamadi</h2>
+        <p className="mt-2 text-[var(--muted-foreground)]">
+          Aradığınız muzayede bulunamadi veya kaldirilmis olabilir.
+        </p>
+        <Link href={`/${locale}/auctions`}>
+          <Button className="mt-6">Muzayedelere Don</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const images = auction.images?.length > 0 ? auction.images : [];
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+    if (images.length > 0) {
+      setCurrentImageIndex((prev) => (prev + 1) % images.length);
+    }
   };
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    if (images.length > 0) {
+      setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    }
   };
 
   return (
@@ -244,13 +162,17 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <div className="space-y-3">
             {/* Main Image */}
             <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-[var(--muted)]">
-              <Image
-                src={images[currentImageIndex]}
-                alt={`${auction.title} - ${currentImageIndex + 1}`}
-                fill
-                className="object-cover"
-                priority
-              />
+              {images.length > 0 ? (
+                <AuctionImage
+                  src={images[currentImageIndex]}
+                  alt={`${auction.title} - ${currentImageIndex + 1}`}
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <AuctionImagePlaceholder />
+              )}
 
               {/* Navigation Arrows */}
               {images.length > 1 && (
@@ -271,17 +193,21 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               )}
 
               {/* Fullscreen Button */}
-              <button
-                onClick={() => setShowFullscreen(true)}
-                className="absolute bottom-3 right-3 rounded-lg bg-black/40 p-2 text-white backdrop-blur-sm transition-all hover:bg-black/60"
-              >
-                <ZoomIn className="h-5 w-5" />
-              </button>
+              {images.length > 0 && (
+                <button
+                  onClick={() => setShowFullscreen(true)}
+                  className="absolute bottom-3 right-3 rounded-lg bg-black/40 p-2 text-white backdrop-blur-sm transition-all hover:bg-black/60"
+                >
+                  <ZoomIn className="h-5 w-5" />
+                </button>
+              )}
 
               {/* Image Counter */}
-              <div className="absolute bottom-3 left-3 rounded-lg bg-black/40 px-3 py-1 text-sm text-white backdrop-blur-sm">
-                {currentImageIndex + 1} / {images.length}
-              </div>
+              {images.length > 0 && (
+                <div className="absolute bottom-3 left-3 rounded-lg bg-black/40 px-3 py-1 text-sm text-white backdrop-blur-sm">
+                  {currentImageIndex + 1} / {images.length}
+                </div>
+              )}
             </div>
 
             {/* Thumbnails */}
@@ -298,11 +224,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                         : "border-transparent opacity-60 hover:opacity-100"
                     )}
                   >
-                    <Image
+                    <AuctionImage
                       src={image}
                       alt={`Thumbnail ${index + 1}`}
                       fill
                       className="object-cover"
+                      compact
                     />
                   </button>
                 ))}
@@ -468,9 +395,6 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                   <Badge variant="success" className="text-[10px]">
                     Dogrulanmis
                   </Badge>
-                  <span className="text-xs text-[var(--muted-foreground)]">
-                    {t("sellerSince")}: 2022
-                  </span>
                 </div>
               </div>
               <Button variant="outline" size="sm">
@@ -480,7 +404,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           </Card>
 
           {/* Bid History */}
-          <BidHistory bids={bids.length > 0 ? bids : mockBids} />
+          <BidHistory bids={bids} />
         </div>
 
         {/* Right Column: Bid Panel */}
@@ -490,19 +414,21 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       </div>
 
       {/* Similar Auctions */}
-      <section className="mt-16">
-        <h2 className="mb-6 font-display text-2xl font-bold">
-          {t("similarAuctions")}
-        </h2>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {mockSimilarAuctions.map((auction) => (
-            <AuctionCard key={auction.id} auction={auction} />
-          ))}
-        </div>
-      </section>
+      {similarAuctions && similarAuctions.length > 0 && (
+        <section className="mt-16">
+          <h2 className="mb-6 font-display text-2xl font-bold">
+            {t("similarAuctions")}
+          </h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {similarAuctions.map((similarAuction: { id: string; [key: string]: unknown }) => (
+              <AuctionCard key={similarAuction.id} auction={similarAuction as unknown as AuctionItem} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Fullscreen Image Modal */}
-      {showFullscreen && (
+      {showFullscreen && images.length > 0 && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
           onClick={() => setShowFullscreen(false)}
@@ -514,7 +440,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             <span className="text-2xl">&times;</span>
           </button>
           <div className="relative h-[80vh] w-[80vw]">
-            <Image
+            <AuctionImage
               src={images[currentImageIndex]}
               alt={auction.title}
               fill

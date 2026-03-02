@@ -47,6 +47,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useAdminFinance } from "@/hooks/use-dashboard";
 
 const revenueData = [
   { month: "Oca", revenue: 450000, commission: 45000, refunds: 12000 },
@@ -188,7 +189,11 @@ const transactionTypeConfig: Record<
 
 export default function AdminFinancePage() {
   const t = useTranslations("admin");
+  void t; // TODO: replace hardcoded strings with t() calls
   const [chartPeriod, setChartPeriod] = useState("monthly");
+  const { data: financeData } = useAdminFinance();
+  void financeData; // TODO: use API data when backend is ready
+  // Use API data when available, fallback to static data for charts
   const [payoutDialog, setPayoutDialog] = useState<{
     open: boolean;
     payout: (typeof sellerPayouts)[0] | null;

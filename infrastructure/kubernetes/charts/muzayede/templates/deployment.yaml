@@ -5,22 +5,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
-  namespace: {{ $.Values.global.namespace }}
+  namespace: {{ include "muzayede.namespace" $ }}
   labels:
-    app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/version: {{ $svc.image.tag | quote }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-    app.kubernetes.io/part-of: muzayede
-    environment: {{ $.Values.global.environment }}
+    {{- include "muzayede.labels" (dict "name" $name "context" $) | nindent 4 }}
 spec:
   {{- if not $svc.autoscaling.enabled }}
   replicas: {{ $svc.replicaCount }}
   {{- end }}
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $name }}
-      app.kubernetes.io/instance: {{ $.Release.Name }}
+      {{- include "muzayede.selectorLabels" (dict "name" $name "context" $) | nindent 6 }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -29,14 +24,17 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $name }}
-        app.kubernetes.io/instance: {{ $.Release.Name }}
-        app.kubernetes.io/version: {{ $svc.image.tag | quote }}
+        {{- include "muzayede.selectorLabels" (dict "name" $name "context" $) | nindent 8 }}
+        app.kubernetes.io/version: {{ $svc.image.tag | default $.Values.global.imageTag | default "latest" | quote }}
         environment: {{ $.Values.global.environment }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
     spec:
-      serviceAccountName: {{ $name }}
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -48,19 +46,24 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: {{ $name }}
-          image: "{{ if $.Values.global.imageRegistry }}{{ $.Values.global.imageRegistry }}/{{ end }}{{ $svc.image.repository }}:{{ $svc.image.tag }}"
+          image: {{ include "muzayede.image" (dict "svc" $svc "global" $.Values.global) }}
           imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
           ports:
             - name: http
               containerPort: {{ $svc.containerPort }}
               protocol: TCP
-          {{- if $svc.env }}
           env:
+            - name: NODE_ENV
+              value: {{ $.Values.global.environment | quote }}
+            {{- if $svc.env }}
             {{- toYaml $svc.env | nindent 12 }}
-          {{- end }}
+            {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ $name }}-config
+                name: muzayede-shared-config
+            - secretRef:
+                name: muzayede-shared-secrets
+                optional: true
             - secretRef:
                 name: {{ $name }}-secrets
                 optional: true
@@ -119,9 +122,9 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: {{ $name }}
+              {{- include "muzayede.selectorLabels" (dict "name" $name "context" $) | nindent 14 }}
 {{- end }}
 {{- end }}

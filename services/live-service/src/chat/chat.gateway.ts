@@ -9,7 +9,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
+import * as crypto from 'crypto';
 import { ChatService } from '../chat-service/chat.service';
 import { StreamingService } from '../streaming/streaming.service';
 
@@ -36,17 +38,63 @@ export class ChatGateway
   /** Track viewer count per auction for broadcasting */
   private readonly auctionViewers = new Map<string, Set<string>>();
 
+  private readonly jwtSecret: string;
+
   constructor(
     private readonly chatService: ChatService,
     private readonly streamingService: StreamingService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.jwtSecret = this.configService.get<string>(
+      'JWT_SECRET',
+      'muzayede-secret-key',
+    );
+  }
 
   afterInit(_server: Server) {
     this.logger.log('Live WebSocket Gateway initialized');
   }
 
   handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+    const token =
+      client.handshake.auth?.token ||
+      (client.handshake.query?.token as string);
+
+    if (token) {
+      try {
+        const payload = this.verifyJwt(token);
+        (client as any).user = payload;
+        this.logger.log(
+          `Client connected: ${client.id} (user: ${payload.sub})`,
+        );
+      } catch {
+        this.logger.warn(`Client ${client.id} connected with invalid token`);
+        client.emit('error', { message: 'Invalid token — connecting as guest' });
+      }
+    } else {
+      this.logger.log(`Client connected: ${client.id} (anonymous)`);
+    }
+  }
+
+  private verifyJwt(token: string): {
+    sub: string;
+    email: string;
+    role: string;
+  } {
+    const parts = token.split('.');
+    if (parts.length !== 3) throw new Error('Invalid token format');
+    const [headerB64, payloadB64, signatureB64] = parts;
+    const expectedSig = crypto
+      .createHmac('sha256', this.jwtSecret)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest('base64url');
+    if (signatureB64 !== expectedSig) throw new Error('Invalid signature');
+    const payload = JSON.parse(
+      Buffer.from(payloadB64, 'base64url').toString('utf8'),
+    );
+    if (payload.exp && payload.exp * 1000 < Date.now())
+      throw new Error('Token expired');
+    return { sub: payload.sub, email: payload.email, role: payload.role };
   }
 
   handleDisconnect(client: Socket) {
@@ -182,7 +230,7 @@ export class ChatGateway
 
       const chatRoom = `chat:${data.auctionId}`;
       this.server.to(chatRoom).emit('chat-message', chatMessage);
-    } catch (error) {
+    } catch (error: any) {
       client.emit('messageRejected', { reason: error.message });
     }
   }

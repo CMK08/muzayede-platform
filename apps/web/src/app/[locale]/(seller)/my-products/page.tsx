@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/utils";
+import { useSellerProducts, useDeleteProduct } from "@/hooks/use-dashboard";
 
 interface SellerProduct {
   id: string;
@@ -142,7 +143,9 @@ const conditionLabels: Record<string, string> = {
 
 export default function MyProductsPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
+  void locale; // TODO: use for locale-aware links
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -152,7 +155,24 @@ export default function MyProductsPage() {
     product: SellerProduct | null;
   }>({ open: false, product: null });
 
-  const filteredProducts = mockProducts.filter((p) => {
+  const { data: productsResponse } = useSellerProducts({ search, status: statusFilter });
+  const deleteProductMutation = useDeleteProduct();
+  void deleteProductMutation; // TODO: wire up delete functionality
+
+  const apiProducts: SellerProduct[] = (productsResponse?.data || []).map((p: Record<string, unknown>) => ({
+    id: p.id as string,
+    title: (p.title || "") as string,
+    category: (p.category || "") as string,
+    condition: (p.condition || "good") as string,
+    estimatedPrice: (p.estimatedPrice || 0) as number,
+    status: (p.status || "draft") as SellerProduct["status"],
+    auctionId: (p.auctionId || null) as string | null,
+    image: (p.image || p.thumbnail || null) as string | null,
+  }));
+
+  const allProducts = apiProducts.length > 0 ? apiProducts : mockProducts;
+
+  const filteredProducts = allProducts.filter((p) => {
     const matchesSearch =
       !search || p.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = !statusFilter || p.status === statusFilter;
@@ -166,7 +186,7 @@ export default function MyProductsPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Urunlerim</h1>
           <p className="mt-1 text-[var(--muted-foreground)]">
-            {mockProducts.length} urun kayitli
+            {allProducts.length} urun kayitli
           </p>
         </div>
         <Button onClick={() => setAddProductDialog(true)}>

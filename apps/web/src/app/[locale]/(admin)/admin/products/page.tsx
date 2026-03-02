@@ -25,6 +25,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { useAdminProducts } from "@/hooks/use-dashboard";
 
 interface Product {
   id: string;
@@ -210,7 +211,31 @@ export default function AdminProductsPage() {
     product: Product | null;
   }>({ open: false, product: null });
 
-  const filteredData = mockProducts.filter((product) => {
+  const { data: productsResponse } = useAdminProducts({
+    page: currentPage,
+    limit: pageSize,
+    search: search || "",
+    category: categoryFilter || "",
+  });
+
+  const apiProducts: Product[] = (productsResponse?.data || []).map((p: Record<string, unknown>) => ({
+    id: p.id as string,
+    title: (p.title || "") as string,
+    category: (p.category || "") as string,
+    seller: (p.seller || p.sellerName || "") as string,
+    sellerAvatar: (p.sellerAvatar || null) as string | null,
+    condition: (p.condition || "good") as string,
+    estimatedPriceMin: (p.estimatedPriceMin || p.estimatedPrice || 0) as number,
+    estimatedPriceMax: (p.estimatedPriceMax || p.estimatedPrice || 0) as number,
+    isActive: (p.isActive !== false) as boolean,
+    thumbnail: (p.thumbnail || p.image || null) as string | null,
+    auctionId: (p.auctionId || null) as string | null,
+    createdAt: (p.createdAt || "") as string,
+  }));
+
+  const allProducts = apiProducts.length > 0 ? apiProducts : mockProducts;
+
+  const filteredData = allProducts.filter((product) => {
     const matchesSearch =
       !search ||
       product.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -251,7 +276,7 @@ export default function AdminProductsPage() {
     }
   };
 
-  const categories = [...new Set(mockProducts.map((p) => p.category))];
+  const categories = [...new Set(allProducts.map((p) => p.category))];
 
   const columns: Column<Product>[] = [
     {
@@ -400,25 +425,25 @@ export default function AdminProductsPage() {
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary-500" />
-            <p className="text-2xl font-bold">{mockProducts.length}</p>
+            <p className="text-2xl font-bold">{allProducts.length}</p>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">Toplam Urun</p>
         </div>
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <p className="text-2xl font-bold text-emerald-500">
-            {mockProducts.filter((p) => p.isActive).length}
+            {allProducts.filter((p) => p.isActive).length}
           </p>
           <p className="text-xs text-[var(--muted-foreground)]">Aktif Urun</p>
         </div>
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <p className="text-2xl font-bold text-blue-500">
-            {mockProducts.filter((p) => p.auctionId).length}
+            {allProducts.filter((p) => p.auctionId).length}
           </p>
           <p className="text-xs text-[var(--muted-foreground)]">Muzayedede</p>
         </div>
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <p className="text-2xl font-bold text-amber-500">
-            {mockProducts.filter((p) => !p.auctionId && p.isActive).length}
+            {allProducts.filter((p) => !p.auctionId && p.isActive).length}
           </p>
           <p className="text-xs text-[var(--muted-foreground)]">Atanamadi</p>
         </div>

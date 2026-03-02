@@ -1,33 +1,38 @@
 ###############################################################################
-# ElastiCache Module — Outputs
+# ElastiCache Module - Outputs
 ###############################################################################
 
 output "replication_group_id" {
-  description = "ElastiCache replication group ID"
-  value       = aws_elasticache_replication_group.this.id
+  description = "ID of the ElastiCache replication group"
+  value       = aws_elasticache_replication_group.main.id
+}
+
+output "replication_group_arn" {
+  description = "ARN of the ElastiCache replication group"
+  value       = aws_elasticache_replication_group.main.arn
 }
 
 output "primary_endpoint_address" {
-  description = "Primary endpoint address"
-  value       = aws_elasticache_replication_group.this.primary_endpoint_address
+  description = "Primary endpoint address of the Redis cluster"
+  value       = aws_elasticache_replication_group.main.primary_endpoint_address
 }
 
-output "configuration_endpoint_address" {
-  description = "Configuration endpoint address (cluster mode)"
-  value       = var.cluster_mode_enabled ? aws_elasticache_replication_group.this.configuration_endpoint_address : null
+output "reader_endpoint_address" {
+  description = "Reader endpoint address of the Redis cluster"
+  value       = aws_elasticache_replication_group.main.reader_endpoint_address
 }
 
 output "port" {
-  description = "Redis port"
-  value       = 6379
+  description = "Port number of the Redis cluster"
+  value       = aws_elasticache_replication_group.main.port
 }
 
 output "security_group_id" {
-  description = "Security group ID for the ElastiCache cluster"
+  description = "Security group ID of the Redis cluster"
   value       = aws_security_group.redis.id
 }
 
-output "arn" {
-  description = "ElastiCache replication group ARN"
-  value       = aws_elasticache_replication_group.this.arn
+output "connection_url" {
+  description = "Redis connection URL (TLS enabled)"
+  value       = "rediss://${aws_elasticache_replication_group.main.primary_endpoint_address}:${aws_elasticache_replication_group.main.port}"
 }

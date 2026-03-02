@@ -5,7 +5,7 @@ interface AuthLayoutProps {
   children: React.ReactNode;
 }
 
-export default function AuthLayout({ children }: AuthLayoutProps) {
+export default function AuthLayout({ children }: AuthLayoutProps): React.JSX.Element {
   return (
     <div className="flex min-h-screen">
       {/* Left: Form */}

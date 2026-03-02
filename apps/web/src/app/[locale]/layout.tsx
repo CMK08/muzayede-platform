@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { routing } from "@/i18n/routing";
 import { Providers } from "./providers";
-import "@/app/globals.css";
 
 export const metadata: Metadata = {
   title: {
@@ -45,12 +44,12 @@ export const metadata: Metadata = {
   },
 };
 
-interface RootLayoutProps {
+interface LocaleLayoutProps {
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 }
 
-export default async function RootLayout({ children, params }: RootLayoutProps) {
+export default async function LocaleLayout({ children, params }: LocaleLayoutProps): Promise<React.JSX.Element> {
   const { locale } = await params;
 
   if (!routing.locales.includes(locale as "tr" | "en" | "ar")) {
@@ -58,34 +57,17 @@ export default async function RootLayout({ children, params }: RootLayoutProps) 
   }
 
   const messages = await getMessages();
-  const direction = locale === "ar" ? "rtl" : "ltr";
 
   return (
-    <html lang={locale} dir={direction} suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-screen font-sans antialiased">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <NextIntlClientProvider messages={messages}>
-            <Providers>{children}</Providers>
-          </NextIntlClientProvider>
-        </ThemeProvider>
-      </body>
-    </html>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <NextIntlClientProvider messages={messages}>
+        <Providers>{children}</Providers>
+      </NextIntlClientProvider>
+    </ThemeProvider>
   );
 }

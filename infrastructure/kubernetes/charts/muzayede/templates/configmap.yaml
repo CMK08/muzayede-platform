@@ -1,42 +1,57 @@
-{{- range $name, $svc := .Values.services }}
-{{- if $svc.enabled }}
----
+{{/*
+Shared ConfigMap - environment variables available to every service.
+Individual services also receive NODE_ENV and PORT via the deployment env block.
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $name }}-config
-  namespace: {{ $.Values.global.namespace }}
+  name: muzayede-shared-config
+  namespace: {{ include "muzayede.namespace" . }}
   labels:
-    app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-    app.kubernetes.io/part-of: muzayede
+    {{- include "muzayede.labels" (dict "name" "shared-config" "context" $) | nindent 4 }}
 data:
-  ENVIRONMENT: {{ $.Values.global.environment | quote }}
-  SERVICE_NAME: {{ $name | quote }}
+  # -------------------------------------------------------------------------
+  # General
+  # -------------------------------------------------------------------------
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
   LOG_LEVEL: "info"
   LOG_FORMAT: "json"
 
-  # Service Discovery
-  API_GATEWAY_URL: "http://api-gateway:3000"
-  AUTH_SERVICE_URL: "http://auth-service:3001"
-  USER_SERVICE_URL: "http://user-service:3002"
-  AUCTION_SERVICE_URL: "http://auction-service:3003"
-  BID_SERVICE_URL: "http://bid-service:3004"
-  PAYMENT_SERVICE_URL: "http://payment-service:3005"
-  NOTIFICATION_SERVICE_URL: "http://notification-service:3006"
-  SEARCH_SERVICE_URL: "http://search-service:3007"
-  MEDIA_SERVICE_URL: "http://media-service:3008"
-  CATEGORY_SERVICE_URL: "http://category-service:3009"
-  ANALYTICS_SERVICE_URL: "http://analytics-service:3010"
-  WEBSOCKET_SERVICE_URL: "http://websocket-service:3011"
-  ADMIN_SERVICE_URL: "http://admin-service:3012"
-  SCHEDULER_SERVICE_URL: "http://scheduler-service:3013"
+  # -------------------------------------------------------------------------
+  # Infrastructure Endpoints
+  # -------------------------------------------------------------------------
+  DATABASE_HOST: {{ .Values.infrastructure.postgresql.host | quote }}
+  DATABASE_PORT: {{ .Values.infrastructure.postgresql.port | quote }}
+  DATABASE_NAME: {{ .Values.infrastructure.postgresql.database | quote }}
 
+  REDIS_HOST: {{ .Values.infrastructure.redis.host | quote }}
+  REDIS_PORT: {{ .Values.infrastructure.redis.port | quote }}
+
+  ELASTICSEARCH_NODE: "http://{{ .Values.infrastructure.elasticsearch.host }}:{{ .Values.infrastructure.elasticsearch.port }}"
+
+  KAFKA_BROKERS: {{ .Values.infrastructure.kafka.brokers | quote }}
+
+  # -------------------------------------------------------------------------
+  # Service Discovery (internal ClusterIP DNS names)
+  # -------------------------------------------------------------------------
+  API_GATEWAY_URL: "http://api-gateway:{{ (index .Values.services "api-gateway").service.port }}"
+  AUTH_SERVICE_URL: "http://auth-service:{{ (index .Values.services "auth-service").service.port }}"
+  USER_SERVICE_URL: "http://user-service:{{ (index .Values.services "user-service").service.port }}"
+  AUCTION_SERVICE_URL: "http://auction-service:{{ (index .Values.services "auction-service").service.port }}"
+  BID_SERVICE_URL: "http://bid-service:{{ (index .Values.services "bid-service").service.port }}"
+  PRODUCT_SERVICE_URL: "http://product-service:{{ (index .Values.services "product-service").service.port }}"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:{{ (index .Values.services "notification-service").service.port }}"
+  SEARCH_SERVICE_URL: "http://search-service:{{ (index .Values.services "search-service").service.port }}"
+  PAYMENT_SERVICE_URL: "http://payment-service:{{ (index .Values.services "payment-service").service.port }}"
+  SHIPPING_SERVICE_URL: "http://shipping-service:{{ (index .Values.services "shipping-service").service.port }}"
+  LIVE_SERVICE_URL: "http://live-service:{{ (index .Values.services "live-service").service.port }}"
+  BLOCKCHAIN_SERVICE_URL: "http://blockchain-service:{{ (index .Values.services "blockchain-service").service.port }}"
+  ANALYTICS_SERVICE_URL: "http://analytics-service:{{ (index .Values.services "analytics-service").service.port }}"
+  CMS_SERVICE_URL: "http://cms-service:{{ (index .Values.services "cms-service").service.port }}"
+
+  # -------------------------------------------------------------------------
   # Observability
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-  OTEL_SERVICE_NAME: {{ $name | quote }}
+  # -------------------------------------------------------------------------
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring:4317"
   METRICS_ENABLED: "true"
   TRACING_ENABLED: "true"
-{{- end }}
-{{- end }}

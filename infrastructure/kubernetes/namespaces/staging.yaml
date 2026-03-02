@@ -1,0 +1,95 @@
+###############################################################################
+# Staging Namespace
+###############################################################################
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: muzayede-staging
+  labels:
+    app.kubernetes.io/part-of: muzayede-platform
+    environment: staging
+    team: platform
+  annotations:
+    description: "Muzayede auction platform - staging environment"
+---
+###############################################################################
+# Resource Quota — staging (lower limits than production)
+###############################################################################
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: staging-quota
+  namespace: muzayede-staging
+  labels:
+    app.kubernetes.io/part-of: muzayede-platform
+    environment: staging
+spec:
+  hard:
+    pods: "60"
+    requests.cpu: "16"
+    limits.cpu: "32"
+    requests.memory: "32Gi"
+    limits.memory: "64Gi"
+    persistentvolumeclaims: "20"
+    requests.storage: "200Gi"
+    services: "25"
+    configmaps: "40"
+    secrets: "40"
+    services.loadbalancers: "3"
+    services.nodeports: "5"
+---
+###############################################################################
+# Limit Range — default resource limits per container
+###############################################################################
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: staging-limit-range
+  namespace: muzayede-staging
+  labels:
+    app.kubernetes.io/part-of: muzayede-platform
+    environment: staging
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "250m"
+        memory: "256Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+      max:
+        cpu: "2"
+        memory: "4Gi"
+      min:
+        cpu: "25m"
+        memory: "32Mi"
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: "8Gi"
+---
+###############################################################################
+# Network Policy — deny all ingress by default, allow within namespace
+###############################################################################
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: muzayede-staging
+  labels:
+    app.kubernetes.io/part-of: muzayede-platform
+    environment: staging
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: muzayede-staging
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring

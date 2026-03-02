@@ -1,14 +1,29 @@
 ###############################################################################
-# ElastiCache Module — Variables
+# ElastiCache Module - Variables
 ###############################################################################
 
-variable "cluster_id" {
-  description = "ElastiCache replication group ID"
+variable "project" {
+  description = "Project name used for resource naming"
   type        = string
 }
 
 variable "environment" {
-  description = "Deployment environment"
+  description = "Environment name (dev, staging, production)"
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC"
+  type        = string
+}
+
+variable "private_subnet_ids" {
+  description = "IDs of private subnets for Redis"
+  type        = list(string)
+}
+
+variable "allowed_security_group_id" {
+  description = "Security group ID allowed to connect to Redis (typically EKS node SG)"
   type        = string
 }
 
@@ -21,82 +36,41 @@ variable "engine_version" {
 variable "node_type" {
   description = "ElastiCache node type"
   type        = string
-  default     = "cache.r6g.large"
+  default     = "cache.t3.medium"
 }
 
 variable "num_cache_clusters" {
-  description = "Number of cache clusters (non-cluster mode)"
+  description = "Number of cache clusters (nodes) in the replication group"
   type        = number
   default     = 2
 }
 
-variable "cluster_mode_enabled" {
-  description = "Enable cluster mode"
+variable "multi_az_enabled" {
+  description = "Enable Multi-AZ for the replication group"
   type        = bool
   default     = true
-}
-
-variable "num_node_groups" {
-  description = "Number of node groups (shards) for cluster mode"
-  type        = number
-  default     = 3
-}
-
-variable "replicas_per_node_group" {
-  description = "Number of replicas per node group"
-  type        = number
-  default     = 1
-}
-
-variable "multi_az" {
-  description = "Enable Multi-AZ"
-  type        = bool
-  default     = true
-}
-
-variable "vpc_id" {
-  description = "VPC ID"
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "Subnet IDs for the subnet group"
-  type        = list(string)
-}
-
-variable "allowed_security_group_ids" {
-  description = "Security group IDs allowed to connect"
-  type        = list(string)
-  default     = []
-}
-
-variable "transit_encryption_enabled" {
-  description = "Enable transit encryption (TLS)"
-  type        = bool
-  default     = true
-}
-
-variable "auth_token" {
-  description = "Auth token for Redis (required when transit encryption is enabled)"
-  type        = string
-  default     = null
-  sensitive   = true
 }
 
 variable "snapshot_retention_limit" {
-  description = "Number of days to retain snapshots"
+  description = "Number of days to retain snapshots (0 to disable)"
   type        = number
   default     = 7
 }
 
-variable "sns_topic_arn" {
-  description = "SNS topic ARN for notifications"
+variable "maxmemory_policy" {
+  description = "Redis maxmemory eviction policy"
   type        = string
-  default     = null
+  default     = "allkeys-lru"
 }
 
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default     = {}
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 30
+}
+
+variable "sns_topic_arn" {
+  description = "ARN of SNS topic for ElastiCache notifications (optional)"
+  type        = string
+  default     = null
 }

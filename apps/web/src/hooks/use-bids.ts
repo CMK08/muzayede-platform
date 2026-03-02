@@ -52,6 +52,7 @@ export function usePlaceBid() {
   return useMutation<PlaceBidResponse, Error, PlaceBidPayload>({
     mutationFn: async ({ auctionId, amount }) => {
       const { data } = await api.post(apiRoutes.bids.place(auctionId), {
+        auctionId,
         amount,
       });
       return data.data;
@@ -94,6 +95,7 @@ export function usePlaceProxyBid() {
   return useMutation<PlaceBidResponse, Error, PlaceProxyBidPayload>({
     mutationFn: async ({ auctionId, maxAmount }) => {
       const { data } = await api.post(apiRoutes.bids.proxy(auctionId), {
+        auctionId,
         maxAmount,
       });
       return data.data;

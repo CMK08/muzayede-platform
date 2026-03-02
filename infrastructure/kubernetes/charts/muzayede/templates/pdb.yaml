@@ -1,0 +1,21 @@
+{{/*
+PodDisruptionBudgets for critical services.
+Enabled per-service via .pdb.enabled in values.yaml.
+*/}}
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.enabled (and $svc.pdb $svc.pdb.enabled) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}-pdb
+  namespace: {{ include "muzayede.namespace" $ }}
+  labels:
+    {{- include "muzayede.labels" (dict "name" $name "context" $) | nindent 4 }}
+spec:
+  minAvailable: {{ $svc.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "muzayede.selectorLabels" (dict "name" $name "context" $) | nindent 6 }}
+{{- end }}
+{{- end }}

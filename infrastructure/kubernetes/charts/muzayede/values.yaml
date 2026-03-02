@@ -1,32 +1,60 @@
 ###############################################################################
-# Muzayede Platform — Helm Values (defaults)
+# Muzayede Platform - Helm Values (production defaults)
 ###############################################################################
 
+# ---------------------------------------------------------------------------
+# Global Settings
+# ---------------------------------------------------------------------------
 global:
-  environment: production
+  imageRegistry: ""                       # e.g. 123456789012.dkr.ecr.eu-central-1.amazonaws.com
+  imageTag: "latest"                      # default tag for all services; overridable per-service
   imagePullPolicy: IfNotPresent
-  imageRegistry: ""  # e.g., 123456789012.dkr.ecr.eu-central-1.amazonaws.com
+  imagePullSecrets: []                    # e.g. [{ name: regcred }]
+
+  environment: production
   namespace: muzayede
   domain: muzayede.com
+
   tls:
     enabled: true
     clusterIssuer: letsencrypt-prod
 
 # ---------------------------------------------------------------------------
-# Service Definitions (15 services)
+# Shared Infrastructure Endpoints (injected via ConfigMap)
+# ---------------------------------------------------------------------------
+infrastructure:
+  postgresql:
+    host: muzayede-postgresql
+    port: 5432
+    database: muzayede
+  redis:
+    host: muzayede-redis-master
+    port: 6379
+  elasticsearch:
+    host: muzayede-elasticsearch
+    port: 9200
+  kafka:
+    brokers: muzayede-kafka-headless:9092
+
+# ---------------------------------------------------------------------------
+# Service Definitions
 # ---------------------------------------------------------------------------
 services:
-  # --- API Gateway ---
+
+  # -------------------------------------------------------------------------
+  # API Gateway (NestJS) - external entry point
+  # -------------------------------------------------------------------------
   api-gateway:
     enabled: true
-    replicaCount: 2
+    replicaCount: 3
     image:
       repository: muzayede/api-gateway
-      tag: latest
-    containerPort: 3000
+      tag: ""                             # falls back to global.imageTag
+    containerPort: 4000
     service:
       type: ClusterIP
       port: 3000
+      targetPort: 4000
     resources:
       requests:
         cpu: 250m
@@ -36,34 +64,38 @@ services:
         memory: 1Gi
     autoscaling:
       enabled: true
-      minReplicas: 2
-      maxReplicas: 10
+      minReplicas: 3
+      maxReplicas: 12
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
-        value: "3000"
+        value: "4000"
     healthCheck:
       path: /health
-      port: 3000
+      port: 4000
     ingress:
       enabled: true
       path: /api
       pathType: Prefix
+    pdb:
+      enabled: true
+      minAvailable: 2
 
-  # --- Auth Service ---
+  # -------------------------------------------------------------------------
+  # Auth Service (NestJS)
+  # -------------------------------------------------------------------------
   auth-service:
     enabled: true
     replicaCount: 2
     image:
       repository: muzayede/auth-service
-      tag: latest
+      tag: ""
     containerPort: 3001
     service:
       type: ClusterIP
       port: 3001
+      targetPort: 3001
     resources:
       requests:
         cpu: 250m
@@ -72,14 +104,12 @@ services:
         cpu: 500m
         memory: 1Gi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
-      maxReplicas: 8
+      maxReplicas: 6
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3001"
     healthCheck:
@@ -87,18 +117,24 @@ services:
       port: 3001
     ingress:
       enabled: false
+    pdb:
+      enabled: true
+      minAvailable: 1
 
-  # --- User Service ---
+  # -------------------------------------------------------------------------
+  # User Service (NestJS)
+  # -------------------------------------------------------------------------
   user-service:
     enabled: true
     replicaCount: 2
     image:
       repository: muzayede/user-service
-      tag: latest
+      tag: ""
     containerPort: 3002
     service:
       type: ClusterIP
       port: 3002
+      targetPort: 3002
     resources:
       requests:
         cpu: 200m
@@ -107,14 +143,12 @@ services:
         cpu: 500m
         memory: 768Mi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
       maxReplicas: 6
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3002"
     healthCheck:
@@ -122,18 +156,23 @@ services:
       port: 3002
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Auction Service ---
+  # -------------------------------------------------------------------------
+  # Auction Service (NestJS)
+  # -------------------------------------------------------------------------
   auction-service:
     enabled: true
     replicaCount: 3
     image:
       repository: muzayede/auction-service
-      tag: latest
+      tag: ""
     containerPort: 3003
     service:
       type: ClusterIP
       port: 3003
+      targetPort: 3003
     resources:
       requests:
         cpu: 500m
@@ -142,14 +181,12 @@ services:
         cpu: 1000m
         memory: 2Gi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 3
       maxReplicas: 15
       targetCPU: 60
       targetMemory: 70
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3003"
     healthCheck:
@@ -157,24 +194,30 @@ services:
       port: 3003
     ingress:
       enabled: false
+    pdb:
+      enabled: true
+      minAvailable: 2
 
-  # --- Bid Service ---
+  # -------------------------------------------------------------------------
+  # Bid Service (NestJS) - latency-critical
+  # -------------------------------------------------------------------------
   bid-service:
     enabled: true
     replicaCount: 3
     image:
       repository: muzayede/bid-service
-      tag: latest
+      tag: ""
     containerPort: 3004
     service:
       type: ClusterIP
       port: 3004
+      targetPort: 3004
     resources:
       requests:
         cpu: 500m
         memory: 1Gi
       limits:
-        cpu: 1000m
+        cpu: 1500m
         memory: 2Gi
     autoscaling:
       enabled: true
@@ -183,8 +226,6 @@ services:
       targetCPU: 60
       targetMemory: 70
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3004"
     healthCheck:
@@ -192,34 +233,38 @@ services:
       port: 3004
     ingress:
       enabled: false
+    pdb:
+      enabled: true
+      minAvailable: 2
 
-  # --- Payment Service ---
-  payment-service:
+  # -------------------------------------------------------------------------
+  # Product Service (NestJS)
+  # -------------------------------------------------------------------------
+  product-service:
     enabled: true
     replicaCount: 2
     image:
-      repository: muzayede/payment-service
-      tag: latest
+      repository: muzayede/product-service
+      tag: ""
     containerPort: 3005
     service:
       type: ClusterIP
       port: 3005
+      targetPort: 3005
     resources:
       requests:
-        cpu: 250m
-        memory: 512Mi
+        cpu: 200m
+        memory: 384Mi
       limits:
         cpu: 500m
-        memory: 1Gi
+        memory: 768Mi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
-      maxReplicas: 8
+      maxReplicas: 6
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3005"
     healthCheck:
@@ -227,18 +272,23 @@ services:
       port: 3005
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Notification Service ---
+  # -------------------------------------------------------------------------
+  # Notification Service (NestJS)
+  # -------------------------------------------------------------------------
   notification-service:
     enabled: true
     replicaCount: 2
     image:
       repository: muzayede/notification-service
-      tag: latest
+      tag: ""
     containerPort: 3006
     service:
       type: ClusterIP
       port: 3006
+      targetPort: 3006
     resources:
       requests:
         cpu: 200m
@@ -247,14 +297,12 @@ services:
         cpu: 500m
         memory: 768Mi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
       maxReplicas: 8
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3006"
     healthCheck:
@@ -262,18 +310,23 @@ services:
       port: 3006
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Search Service ---
+  # -------------------------------------------------------------------------
+  # Search Service (NestJS)
+  # -------------------------------------------------------------------------
   search-service:
     enabled: true
     replicaCount: 2
     image:
       repository: muzayede/search-service
-      tag: latest
+      tag: ""
     containerPort: 3007
     service:
       type: ClusterIP
       port: 3007
+      targetPort: 3007
     resources:
       requests:
         cpu: 250m
@@ -282,14 +335,12 @@ services:
         cpu: 500m
         memory: 1Gi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
       maxReplicas: 8
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3007"
     healthCheck:
@@ -297,34 +348,37 @@ services:
       port: 3007
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Media Service ---
-  media-service:
+  # -------------------------------------------------------------------------
+  # Payment Service (NestJS)
+  # -------------------------------------------------------------------------
+  payment-service:
     enabled: true
     replicaCount: 2
     image:
-      repository: muzayede/media-service
-      tag: latest
+      repository: muzayede/payment-service
+      tag: ""
     containerPort: 3008
     service:
       type: ClusterIP
       port: 3008
+      targetPort: 3008
     resources:
       requests:
-        cpu: 200m
-        memory: 384Mi
+        cpu: 250m
+        memory: 512Mi
       limits:
         cpu: 500m
-        memory: 768Mi
+        memory: 1Gi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
       maxReplicas: 6
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3008"
     healthCheck:
@@ -332,34 +386,38 @@ services:
       port: 3008
     ingress:
       enabled: false
+    pdb:
+      enabled: true
+      minAvailable: 1
 
-  # --- Category Service ---
-  category-service:
+  # -------------------------------------------------------------------------
+  # Shipping Service (NestJS)
+  # -------------------------------------------------------------------------
+  shipping-service:
     enabled: true
     replicaCount: 2
     image:
-      repository: muzayede/category-service
-      tag: latest
+      repository: muzayede/shipping-service
+      tag: ""
     containerPort: 3009
     service:
       type: ClusterIP
       port: 3009
+      targetPort: 3009
     resources:
       requests:
-        cpu: 100m
+        cpu: 150m
         memory: 256Mi
       limits:
-        cpu: 300m
+        cpu: 400m
         memory: 512Mi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
       maxReplicas: 4
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3009"
     healthCheck:
@@ -367,53 +425,23 @@ services:
       port: 3009
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Analytics Service ---
-  analytics-service:
+  # -------------------------------------------------------------------------
+  # Live Service (NestJS) - WebSocket / real-time
+  # -------------------------------------------------------------------------
+  live-service:
     enabled: true
-    replicaCount: 2
+    replicaCount: 3
     image:
-      repository: muzayede/analytics-service
-      tag: latest
+      repository: muzayede/live-service
+      tag: ""
     containerPort: 3010
     service:
       type: ClusterIP
       port: 3010
-    resources:
-      requests:
-        cpu: 200m
-        memory: 384Mi
-      limits:
-        cpu: 500m
-        memory: 768Mi
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 6
-      targetCPU: 70
-      targetMemory: 80
-    env:
-      - name: NODE_ENV
-        value: production
-      - name: PORT
-        value: "3010"
-    healthCheck:
-      path: /health
-      port: 3010
-    ingress:
-      enabled: false
-
-  # --- WebSocket Service ---
-  websocket-service:
-    enabled: true
-    replicaCount: 3
-    image:
-      repository: muzayede/websocket-service
-      tag: latest
-    containerPort: 3011
-    service:
-      type: ClusterIP
-      port: 3011
+      targetPort: 3010
     resources:
       requests:
         cpu: 500m
@@ -422,88 +450,91 @@ services:
         cpu: 1000m
         memory: 2Gi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 3
       maxReplicas: 15
       targetCPU: 60
       targetMemory: 70
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
-        value: "3011"
+        value: "3010"
     healthCheck:
       path: /health
-      port: 3011
+      port: 3010
     ingress:
       enabled: true
       path: /ws
       pathType: Prefix
+    pdb:
+      enabled: true
+      minAvailable: 2
 
-  # --- Admin Service ---
-  admin-service:
+  # -------------------------------------------------------------------------
+  # Blockchain Service (NestJS)
+  # -------------------------------------------------------------------------
+  blockchain-service:
     enabled: true
-    replicaCount: 1
+    replicaCount: 2
     image:
-      repository: muzayede/admin-service
-      tag: latest
+      repository: muzayede/blockchain-service
+      tag: ""
     containerPort: 3012
     service:
       type: ClusterIP
       port: 3012
+      targetPort: 3012
     resources:
       requests:
-        cpu: 100m
-        memory: 256Mi
+        cpu: 200m
+        memory: 384Mi
       limits:
-        cpu: 300m
-        memory: 512Mi
+        cpu: 500m
+        memory: 768Mi
     autoscaling:
-      enabled: true
-      minReplicas: 1
-      maxReplicas: 3
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3012"
     healthCheck:
       path: /health
       port: 3012
     ingress:
-      enabled: true
-      path: /admin
-      pathType: Prefix
+      enabled: false
+    pdb:
+      enabled: false
 
-  # --- Scheduler Service ---
-  scheduler-service:
+  # -------------------------------------------------------------------------
+  # Analytics Service (NestJS)
+  # -------------------------------------------------------------------------
+  analytics-service:
     enabled: true
-    replicaCount: 1
+    replicaCount: 2
     image:
-      repository: muzayede/scheduler-service
-      tag: latest
+      repository: muzayede/analytics-service
+      tag: ""
     containerPort: 3013
     service:
       type: ClusterIP
       port: 3013
+      targetPort: 3013
     resources:
       requests:
-        cpu: 100m
-        memory: 256Mi
+        cpu: 200m
+        memory: 384Mi
       limits:
-        cpu: 300m
-        memory: 512Mi
+        cpu: 500m
+        memory: 768Mi
     autoscaling:
       enabled: false
-      minReplicas: 1
-      maxReplicas: 1
-      targetCPU: 80
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
       - name: PORT
         value: "3013"
     healthCheck:
@@ -511,38 +542,88 @@ services:
       port: 3013
     ingress:
       enabled: false
+    pdb:
+      enabled: false
 
-  # --- Web Frontend ---
-  web-frontend:
+  # -------------------------------------------------------------------------
+  # CMS Service (NestJS)
+  # -------------------------------------------------------------------------
+  cms-service:
     enabled: true
     replicaCount: 2
     image:
-      repository: muzayede/web-frontend
-      tag: latest
+      repository: muzayede/cms-service
+      tag: ""
+    containerPort: 3014
+    service:
+      type: ClusterIP
+      port: 3014
+      targetPort: 3014
+    resources:
+      requests:
+        cpu: 150m
+        memory: 256Mi
+      limits:
+        cpu: 400m
+        memory: 512Mi
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPU: 70
+      targetMemory: 80
+    env:
+      - name: PORT
+        value: "3014"
+    healthCheck:
+      path: /health
+      port: 3014
+    ingress:
+      enabled: false
+    pdb:
+      enabled: false
+
+  # -------------------------------------------------------------------------
+  # Web Frontend (Next.js)
+  # -------------------------------------------------------------------------
+  web:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: muzayede/web
+      tag: ""
     containerPort: 3000
     service:
       type: ClusterIP
       port: 3000
+      targetPort: 3000
     resources:
       requests:
-        cpu: 100m
-        memory: 128Mi
+        cpu: 200m
+        memory: 256Mi
       limits:
-        cpu: 300m
+        cpu: 500m
         memory: 512Mi
     autoscaling:
-      enabled: true
+      enabled: false
       minReplicas: 2
-      maxReplicas: 8
+      maxReplicas: 10
       targetCPU: 70
       targetMemory: 80
     env:
-      - name: NODE_ENV
-        value: production
+      - name: PORT
+        value: "3000"
+      - name: NEXT_PUBLIC_API_URL
+        value: "https://api.muzayede.com"
+      - name: NEXT_PUBLIC_WS_URL
+        value: "wss://ws.muzayede.com"
     healthCheck:
-      path: /
+      path: /api/health
       port: 3000
     ingress:
       enabled: true
       path: /
       pathType: Prefix
+    pdb:
+      enabled: true
+      minAvailable: 1

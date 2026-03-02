@@ -4,7 +4,7 @@ import { routing } from "./i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
-const protectedRoutes = ["/dashboard", "/admin"];
+const protectedRoutes = ["/admin", "/seller", "/dashboard", "/my-bids", "/my-orders", "/favorites", "/notifications", "/profile"];
 const authRoutes = ["/login", "/register"];
 
 export default function middleware(request: NextRequest) {
@@ -40,15 +40,19 @@ export default function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect to dashboard if accessing auth route while authenticated
+  // Redirect authenticated users away from auth routes
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL(`/${locale}/dashboard`, request.url));
-  }
-
-  // Check admin routes
-  if (pathnameWithoutLocale.startsWith("/admin")) {
-    // In a real app, you'd decode the JWT and check the role
-    // For now, we'll let the client handle the role check
+    // Decode JWT to check role and redirect accordingly
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const role = payload.role;
+      if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
+        return NextResponse.redirect(new URL(`/${locale}/admin/dashboard`, request.url));
+      }
+    } catch {
+      // If JWT decode fails, redirect to homepage
+    }
+    return NextResponse.redirect(new URL(`/${locale}`, request.url));
   }
 
   return intlMiddleware(request);

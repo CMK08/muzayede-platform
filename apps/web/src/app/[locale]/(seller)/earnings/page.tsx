@@ -6,7 +6,6 @@ import {
   DollarSign,
   Clock,
   ArrowDownToLine,
-  CheckCircle2,
   Download,
   Send,
   Wallet,
@@ -44,6 +43,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useSellerEarnings, useRequestPayout } from "@/hooks/use-dashboard";
 
 const earningsData = [
   { month: "Oca", earnings: 95000 },
@@ -110,9 +110,14 @@ const payoutHistory = [
 
 export default function EarningsPage() {
   const t = useTranslations("common");
+  void t; // TODO: replace hardcoded strings with t() calls
   const [chartPeriod, setChartPeriod] = useState("monthly");
   const [payoutDialog, setPayoutDialog] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
+
+  const { data: earningsApiData } = useSellerEarnings();
+  void earningsApiData; // TODO: use API data when backend is ready
+  const requestPayoutMutation = useRequestPayout();
 
   const totalEarned = earningsData.reduce((sum, d) => sum + d.earnings, 0);
   const pendingAmount = 175000;
@@ -353,15 +358,22 @@ export default function EarningsPage() {
               Vazgec
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await requestPayoutMutation.mutateAsync({ amount: Number(payoutAmount) });
+                } catch {
+                  // Error handled by mutation
+                }
                 setPayoutDialog(false);
                 setPayoutAmount("");
               }}
               disabled={
                 !payoutAmount ||
                 Number(payoutAmount) < minPayout ||
-                Number(payoutAmount) > availableBalance
+                Number(payoutAmount) > availableBalance ||
+                requestPayoutMutation.isPending
               }
+              loading={requestPayoutMutation.isPending}
             >
               <Send className="mr-2 h-4 w-4" />
               Odeme Talep Et

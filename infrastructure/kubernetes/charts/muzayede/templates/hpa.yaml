@@ -1,16 +1,17 @@
+{{/*
+HorizontalPodAutoscaler - only for services with autoscaling.enabled=true.
+By default this includes api-gateway and bid-service.
+*/}}
 {{- range $name, $svc := .Values.services }}
 {{- if and $svc.enabled $svc.autoscaling.enabled }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ $name }}
-  namespace: {{ $.Values.global.namespace }}
+  name: {{ $name }}-hpa
+  namespace: {{ include "muzayede.namespace" $ }}
   labels:
-    app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-    app.kubernetes.io/part-of: muzayede
+    {{- include "muzayede.labels" (dict "name" $name "context" $) | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
