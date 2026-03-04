@@ -17,10 +17,11 @@ import {
   Package,
   ShoppingCart,
   DollarSign,
+  Radio,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+
 import { cn } from "@/lib/utils";
 
 interface AdminLayoutProps {
@@ -42,7 +43,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       href: `/${locale}/admin/auctions`,
       label: "Muzayedeler",
       icon: Gavel,
-      badge: "342",
+    },
+    {
+      href: `/${locale}/admin/live-auction`,
+      label: "Canli Yayin",
+      icon: Radio,
     },
     {
       href: `/${locale}/admin/users`,
@@ -135,14 +140,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 >
                   <item.icon className="h-5 w-5" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <Badge
-                      variant="default"
-                      className="bg-primary-500/30 text-primary-300 text-[10px]"
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
                 </Link>
               );
             })}

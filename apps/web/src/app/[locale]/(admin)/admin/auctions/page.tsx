@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 import {
   Plus,
   Eye,
@@ -102,6 +103,7 @@ const typeConfig: Record<string, { label: string; variant: "default" | "outline"
 
 export default function AdminAuctionsPage() {
   const t = useTranslations("admin");
+  const locale = useLocale();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -317,12 +319,35 @@ export default function AdminAuctionsPage() {
       className: "text-right w-44",
       render: (item) => (
         <div className="flex items-center justify-end gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Goruntule">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Goruntule"
+            onClick={() => window.open(`/${locale}/auctions/${item.id}`, '_blank')}
+          >
             <Eye className="h-4 w-4" />
           </Button>
+          {item.status === "LIVE" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-red-500"
+              title="Canli Yayin"
+              onClick={() => window.open(`/${locale}/admin/live-auction?auctionId=${item.id}`, '_blank')}
+            >
+              <Play className="h-4 w-4 fill-current" />
+            </Button>
+          )}
           {item.status === "DRAFT" && (
             <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" title="Duzenle">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Duzenle"
+                onClick={() => setCreateDialog(true)}
+              >
                 <Edit className="h-4 w-4" />
               </Button>
               <Button
