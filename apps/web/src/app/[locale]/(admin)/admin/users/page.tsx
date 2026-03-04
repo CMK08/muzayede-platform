@@ -203,9 +203,12 @@ const roleConfig: Record<
   string,
   { label: string; variant: "default" | "secondary" | "warning" | "destructive" }
 > = {
+  super_admin: { label: "Super Admin", variant: "destructive" },
   admin: { label: "Admin", variant: "destructive" },
   moderator: { label: "Moderator", variant: "warning" },
+  auction_house: { label: "Muzayede Evi", variant: "warning" },
   seller: { label: "Satici", variant: "default" },
+  buyer: { label: "Alici", variant: "secondary" },
   user: { label: "Kullanici", variant: "secondary" },
 };
 
@@ -214,9 +217,11 @@ const kycConfig: Record<
   { label: string; variant: "success" | "warning" | "destructive" | "secondary" }
 > = {
   verified: { label: "Dogrulanmis", variant: "success" },
+  approved: { label: "Dogrulanmis", variant: "success" },
   pending: { label: "Beklemede", variant: "warning" },
   rejected: { label: "Reddedildi", variant: "destructive" },
   not_submitted: { label: "Gonderilmedi", variant: "secondary" },
+  "not-submitted": { label: "Gonderilmedi", variant: "secondary" },
 };
 
 function getTrustVariant(score: number): "success" | "warning" | "destructive" {
@@ -247,20 +252,24 @@ export default function AdminUsersPage() {
     role: roleFilter || "",
   });
 
-  const apiUsers: UserRecord[] = (usersResponse?.data || []).map((u: Record<string, unknown>) => ({
-    id: u.id as string,
-    firstName: (u.firstName || "") as string,
-    lastName: (u.lastName || "") as string,
-    email: (u.email || "") as string,
-    phone: (u.phone || "") as string,
-    role: (u.role || "user") as string,
-    isActive: (u.isActive !== false) as boolean,
-    kycStatus: (u.kycStatus || "pending") as string,
-    totalBids: (u.totalBids || 0) as number,
-    totalSpent: (u.totalSpent || 0) as number,
-    joinDate: (u.joinDate || u.createdAt || "") as string,
-    avatar: (u.avatar || null) as string | null,
-  }));
+  const apiUsers: UserRecord[] = (usersResponse?.data || []).map((u: Record<string, unknown>) => {
+    const profile = (u.profile || {}) as Record<string, unknown>;
+    return {
+      id: u.id as string,
+      firstName: (profile.firstName || profile.displayName || "") as string,
+      lastName: (profile.lastName || "") as string,
+      email: (u.email || "") as string,
+      phone: (u.phone || "") as string,
+      role: ((u.role || "BUYER") as string).toLowerCase(),
+      isActive: (u.isActive !== false) as boolean,
+      kycStatus: ((u.kycStatus || "NOT_SUBMITTED") as string).toLowerCase().replace("_", "-"),
+      trustScore: (u.trustScore || 0) as number,
+      totalBids: (u.totalBids || 0) as number,
+      totalPurchases: (u.totalPurchases || 0) as number,
+      createdAt: (u.createdAt || "") as string,
+      avatar: (u.avatarUrl || null) as string | null,
+    };
+  });
 
   const allUsers = apiUsers.length > 0 ? apiUsers : mockUsers;
 
@@ -490,10 +499,11 @@ export default function AdminUsersPage() {
             <Select
               options={[
                 { value: "", label: "Tum Roller" },
+                { value: "super_admin", label: "Super Admin" },
                 { value: "admin", label: "Admin" },
-                { value: "moderator", label: "Moderator" },
+                { value: "auction_house", label: "Muzayede Evi" },
                 { value: "seller", label: "Satici" },
-                { value: "user", label: "Kullanici" },
+                { value: "buyer", label: "Alici" },
               ]}
               value={roleFilter}
               onChange={(e) => {

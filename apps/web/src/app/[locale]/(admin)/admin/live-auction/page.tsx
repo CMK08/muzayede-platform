@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 
 interface AuctionSession {
@@ -25,7 +26,16 @@ interface AuctionSession {
  * - Accept phone/absentee bids
  * - Manage chat
  */
+interface LiveAuction {
+  id: string;
+  title: string;
+  status: string;
+  type: string;
+  bidCount: number;
+}
+
 export default function LiveAuctionControlPage() {
+  const searchParams = useSearchParams();
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -37,6 +47,7 @@ export default function LiveAuctionControlPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
+  const [liveAuctions, setLiveAuctions] = useState<LiveAuction[]>([]);
 
   const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString('tr-TR');
@@ -46,7 +57,24 @@ export default function LiveAuctionControlPage() {
   useEffect(() => {
     const storedToken = localStorage.getItem('accessToken') || '';
     setToken(storedToken);
-  }, []);
+
+    // Read auctionId from query params
+    const qsAuctionId = searchParams.get('auctionId');
+    if (qsAuctionId) {
+      setAuctionId(qsAuctionId);
+    }
+
+    // Fetch live/published auctions
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+    fetch(`${apiUrl}/auctions?status=LIVE`, {
+      headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.data) setLiveAuctions(data.data);
+      })
+      .catch(() => {});
+  }, [searchParams]);
 
   // Connect WebRTC signaling as broadcaster
   function startBroadcast() {
@@ -286,16 +314,40 @@ export default function LiveAuctionControlPage() {
           {/* Setup */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
             <h2 className="text-lg font-semibold mb-3">Müzayede Ayarları</h2>
+            {/* Live Auction Selector */}
+            {liveAuctions.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Aktif Muzayedeler
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {liveAuctions.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => setAuctionId(a.id)}
+                      className={`px-3 py-2 rounded text-sm border transition-colors ${
+                        auctionId === a.id
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:border-blue-400 text-gray-800 dark:text-white'
+                      }`}
+                    >
+                      {a.title} ({a.bidCount} teklif)
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Müzayede ID
+                  Muzayede ID
                 </label>
                 <input
                   type="text"
                   value={auctionId}
                   onChange={(e) => setAuctionId(e.target.value)}
-                  placeholder="Müzayede ID girin"
+                  placeholder="Muzayede ID girin veya yukaridan secin"
                   className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
@@ -304,7 +356,7 @@ export default function LiveAuctionControlPage() {
                 disabled={!auctionId}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded text-sm font-medium"
               >
-                Oturum Oluştur
+                Oturum Olustur
               </button>
             </div>
           </div>
