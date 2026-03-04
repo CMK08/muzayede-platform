@@ -47,19 +47,19 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
   const userNavItems = isAuthenticated
     ? [
-        { href: `/${locale}/dashboard`, label: t("dashboard"), icon: User },
+        { href: `/${locale}/profile`, label: t("dashboard"), icon: User },
         {
-          href: `/${locale}/dashboard/watchlist`,
+          href: `/${locale}/favorites`,
           label: t("watchlist"),
           icon: Heart,
         },
         {
-          href: `/${locale}/dashboard/bids`,
+          href: `/${locale}/my-bids`,
           label: t("myBids"),
           icon: Gavel,
         },
         {
-          href: `/${locale}/dashboard/settings`,
+          href: `/${locale}/profile`,
           label: t("settings"),
           icon: Settings,
         },

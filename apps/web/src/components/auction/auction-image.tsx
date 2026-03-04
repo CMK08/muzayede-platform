@@ -87,7 +87,8 @@ export function AuctionImage({
   const isValidSrc =
     src &&
     src.trim() !== "" &&
-    !src.endsWith("placeholder-auction.jpg"); // the old JPG placeholder does not exist
+    !src.endsWith("placeholder-auction.jpg") &&
+    !src.startsWith("/images/"); // local /images/ paths don't exist — seed data placeholders
 
   if (!isValidSrc || hasError) {
     return (

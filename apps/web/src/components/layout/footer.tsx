@@ -120,7 +120,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href={`/${locale}/how-it-works`}
+                  href={`/${locale}/about`}
                   className="text-sm text-gray-400 transition-colors hover:text-primary-400"
                 >
                   {t("howItWorks")}

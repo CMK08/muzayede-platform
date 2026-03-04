@@ -219,7 +219,7 @@ export function Header() {
                       </Link>
 
                       <Link
-                        href={`/${locale}/dashboard/bids`}
+                        href={`/${locale}/my-bids`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
                         onClick={() => setShowUserMenu(false)}
                       >

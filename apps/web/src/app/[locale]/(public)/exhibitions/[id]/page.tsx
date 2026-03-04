@@ -2,9 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Calendar, Package, User, Layers } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface ExhibitionDetail {
   id: string;
@@ -99,7 +111,7 @@ export default function ExhibitionDetailPage() {
       <div className="relative rounded-2xl overflow-hidden mb-8">
         {exhibition.coverImageUrl ? (
           <div className="relative h-72 md:h-96">
-            <Image
+            <SafeImage
               src={exhibition.coverImageUrl}
               alt={exhibition.title}
               fill
@@ -173,7 +185,7 @@ export default function ExhibitionDetailPage() {
               >
                 <div className="relative aspect-square bg-gray-100">
                   {primaryMedia ? (
-                    <Image
+                    <SafeImage
                       src={primaryMedia.url}
                       alt={product.title}
                       fill

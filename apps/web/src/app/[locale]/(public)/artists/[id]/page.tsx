@@ -2,9 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { MapPin, Calendar, TrendingUp, Package, User, ArrowLeft } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface ArtistDetail {
   id: string;
@@ -82,7 +94,7 @@ export default function ArtistDetailPage() {
         <div className="flex flex-col md:flex-row items-start gap-8">
           <div className="w-40 h-40 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
             {artist.photoUrl ? (
-              <Image src={artist.photoUrl} alt={artist.name} width={160} height={160} className="object-cover w-full h-full" />
+              <SafeImage src={artist.photoUrl} alt={artist.name} width={160} height={160} className="object-cover w-full h-full" />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <User className="w-16 h-16 text-gray-300" />
@@ -141,7 +153,7 @@ export default function ArtistDetailPage() {
                 >
                   <div className="relative aspect-square bg-gray-100">
                     {primaryMedia ? (
-                      <Image
+                      <SafeImage
                         src={primaryMedia.url}
                         alt={product.title}
                         fill

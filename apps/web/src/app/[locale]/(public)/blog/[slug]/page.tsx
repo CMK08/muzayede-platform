@@ -2,9 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Calendar, User, Clock } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface BlogPost {
   id: string;
@@ -100,7 +112,7 @@ export default function BlogPostPage() {
             <div className="flex items-center gap-3 mt-4">
               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                 {post.author.avatarUrl ? (
-                  <Image
+                  <SafeImage
                     src={post.author.avatarUrl}
                     alt=""
                     width={40}
@@ -123,7 +135,7 @@ export default function BlogPostPage() {
 
         {post.coverImageUrl && (
           <div className="relative aspect-video rounded-xl overflow-hidden mb-8">
-            <Image src={post.coverImageUrl} alt={post.title} fill className="object-cover" />
+            <SafeImage src={post.coverImageUrl} alt={post.title} fill className="object-cover" />
           </div>
         )}
 

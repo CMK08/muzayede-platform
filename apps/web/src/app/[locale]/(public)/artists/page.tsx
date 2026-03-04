@@ -1,9 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { Search, MapPin, User } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface Artist {
   id: string;
@@ -109,7 +121,7 @@ export default function ArtistsPage() {
                   >
                     <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
                       {artist.photoUrl ? (
-                        <Image src={artist.photoUrl} alt={artist.name} width={64} height={64} className="object-cover w-full h-full" />
+                        <SafeImage src={artist.photoUrl} alt={artist.name} width={64} height={64} className="object-cover w-full h-full" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-400">
                           <User className="w-8 h-8" />

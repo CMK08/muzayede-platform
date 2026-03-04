@@ -2,9 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { Search, SlidersHorizontal, X, Package } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface SearchResult {
   id: string;
@@ -227,7 +239,7 @@ export default function SearchPage() {
                 >
                   <div className="relative aspect-square bg-gray-100">
                     {item.imageUrl ? (
-                      <Image src={item.imageUrl} alt={item.title} fill className="object-cover group-hover:scale-105 transition-transform" />
+                      <SafeImage src={item.imageUrl} alt={item.title} fill className="object-cover group-hover:scale-105 transition-transform" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300">
                         <Package className="w-12 h-12" />

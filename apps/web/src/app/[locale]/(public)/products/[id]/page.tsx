@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import {
   ChevronLeft,
@@ -18,6 +18,18 @@ import {
   User,
   Maximize2,
 } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface Product {
   id: string;
@@ -121,7 +133,7 @@ export default function ProductDetailPage() {
               currentMedia.type === 'VIDEO' ? (
                 <video src={currentMedia.url} controls className="w-full h-full object-contain" />
               ) : (
-                <Image
+                <SafeImage
                   src={currentMedia.url}
                   alt={product.title}
                   fill
@@ -168,7 +180,7 @@ export default function ProductDetailPage() {
                     i === selectedMediaIndex ? 'border-blue-600' : 'border-transparent hover:border-gray-300'
                   }`}
                 >
-                  <Image src={m.url} alt="" fill className="object-cover" />
+                  <SafeImage src={m.url} alt="" fill className="object-cover" />
                 </button>
               ))}
             </div>
@@ -327,7 +339,7 @@ export default function ProductDetailPage() {
             <div className="border rounded-lg p-4 flex items-center gap-3">
               <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
                 {product.seller.avatarUrl ? (
-                  <Image src={product.seller.avatarUrl} alt="" width={40} height={40} className="rounded-full" />
+                  <SafeImage src={product.seller.avatarUrl} alt="" width={40} height={40} className="rounded-full" />
                 ) : (
                   <User className="w-5 h-5 text-gray-400" />
                 )}
@@ -366,7 +378,7 @@ export default function ProductDetailPage() {
           >
             <Maximize2 className="w-6 h-6" />
           </button>
-          <Image
+          <SafeImage
             src={currentMedia.url}
             alt={product.title}
             width={1200}

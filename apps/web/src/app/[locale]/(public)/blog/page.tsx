@@ -1,9 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { Calendar, User, ArrowRight } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface BlogPost {
   id: string;
@@ -63,7 +75,7 @@ export default function BlogPage() {
               <article className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition h-full flex flex-col">
                 <div className={`relative bg-gray-100 ${i === 0 ? 'h-64' : 'h-48'}`}>
                   {post.coverImageUrl ? (
-                    <Image src={post.coverImageUrl} alt={post.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <SafeImage src={post.coverImageUrl} alt={post.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-blue-100 to-purple-100" />
                   )}

@@ -1,9 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { Calendar, Eye, Layers } from 'lucide-react';
+
+function SafeImage(props: React.ComponentProps<typeof NextImage>) {
+  const src = typeof props.src === 'string' ? props.src : '';
+  if (src.startsWith('/images/')) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 ${props.fill ? 'absolute inset-0' : ''}`} style={!props.fill ? { width: typeof props.width === 'number' ? props.width : undefined, height: typeof props.height === 'number' ? props.height : undefined } : undefined}>
+        <span className="text-gray-500 text-xs">No image</span>
+      </div>
+    );
+  }
+  return <NextImage {...props} />;
+}
 
 interface Exhibition {
   id: string;
@@ -51,7 +63,7 @@ export default function ExhibitionsPage() {
       >
         <div className="relative h-56 bg-gray-100">
           {exhibition.coverImageUrl ? (
-            <Image
+            <SafeImage
               src={exhibition.coverImageUrl}
               alt={exhibition.title}
               fill
