@@ -210,7 +210,7 @@ export function Header() {
                       </Link>
 
                       <Link
-                        href={`/${locale}/dashboard/watchlist`}
+                        href={`/${locale}/favorites`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
                         onClick={() => setShowUserMenu(false)}
                       >
@@ -228,7 +228,7 @@ export function Header() {
                       </Link>
 
                       <Link
-                        href={`/${locale}/dashboard/settings`}
+                        href={`/${locale}/profile`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
                         onClick={() => setShowUserMenu(false)}
                       >

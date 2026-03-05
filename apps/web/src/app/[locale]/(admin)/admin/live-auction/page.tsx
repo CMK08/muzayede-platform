@@ -270,7 +270,7 @@ export default function LiveAuctionControlPage() {
 
   async function openLot(lotNumber: number) {
     const data = await apiCall(
-      `/${auctionId}/lots/${lotNumber}/open`,
+      `/auctioneer/${auctionId}/lots/${lotNumber}/open`,
       'POST',
     );
     if (data) addLog(`Lot #${lotNumber} açıldı`);

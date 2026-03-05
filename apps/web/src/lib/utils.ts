@@ -31,7 +31,9 @@ export function formatDate(
   formatStr: string = "dd MMM yyyy HH:mm",
   locale: string = "tr"
 ): string {
+  if (!date) return "-";
   const dateObj = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(dateObj.getTime())) return "-";
   return format(dateObj, formatStr, { locale: localeMap[locale] || tr });
 }
 

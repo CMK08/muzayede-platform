@@ -262,7 +262,7 @@ export default function AdminUsersPage() {
       phone: (u.phone || "") as string,
       role: ((u.role || "BUYER") as string).toLowerCase(),
       isActive: (u.isActive !== false) as boolean,
-      kycStatus: ((u.kycStatus || "NOT_SUBMITTED") as string).toLowerCase().replace("_", "-"),
+      kycStatus: ((u.kycStatus || "NOT_SUBMITTED") as string).toLowerCase().replace(/_/g, "-"),
       trustScore: (u.trustScore || 0) as number,
       totalBids: (u.totalBids || 0) as number,
       totalPurchases: (u.totalPurchases || 0) as number,
@@ -449,7 +449,7 @@ export default function AdminUsersPage() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-emerald-500" />
             <p className="text-2xl font-bold">
-              {allUsers.filter((u) => u.kycStatus === "verified").length}
+              {allUsers.filter((u) => u.kycStatus === "verified" || u.kycStatus === "approved").length}
             </p>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">KYC Dogrulanmis</p>

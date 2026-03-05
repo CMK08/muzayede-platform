@@ -7,10 +7,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   LayoutDashboard,
   Heart,
-  MessageSquare,
-  CreditCard,
   Settings,
-  HelpCircle,
   Menu,
   X,
   TrendingUp,
@@ -65,24 +62,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Bell,
     },
     {
-      href: `/${locale}/dashboard/messages`,
-      label: t("messages"),
-      icon: MessageSquare,
-    },
-    {
-      href: `/${locale}/dashboard/payments`,
-      label: t("payments"),
-      icon: CreditCard,
-    },
-    {
-      href: `/${locale}/dashboard/settings`,
+      href: `/${locale}/profile`,
       label: t("settings"),
       icon: Settings,
-    },
-    {
-      href: `/${locale}/dashboard/help`,
-      label: t("help"),
-      icon: HelpCircle,
     },
   ];
 
