@@ -1,3 +1,19 @@
+/**
+ * Giris Sayfasi (Login Page)
+ *
+ * Kullanicilarin platforma giris yapmasini saglayan kimlik dogrulama sayfasidir.
+ *
+ * Desteklenen giris yontemleri:
+ * - E-posta + sifre ile giris
+ * - Telefon + sifre ile giris
+ * - OTP (tek kullanimlik sifre) ile giris
+ * - OAuth (Google, Apple, Facebook) ile giris
+ *
+ * Giris sonrasi kullanici rolune gore yonlendirme yapilir:
+ * - ADMIN/SUPER_ADMIN -> admin paneline
+ * - Diger roller -> ana sayfaya
+ * - callbackUrl varsa -> belirtilen sayfaya
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -10,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/stores/auth-store";
 
+// Zod ile e-posta giris formu dogrulama semasi
 const loginSchema = z.object({
   email: z.string().email("Gecerli bir e-posta adresi girin"),
   password: z.string().min(8, "Sifre en az 8 karakter olmalidir"),
@@ -19,13 +36,17 @@ export default function LoginPage() {
   const locale = useLocale();
   const t = useTranslations("auth");
   const router = useRouter();
+  // Giris sonrasi yonlendirme URL'si icin query parametrelerini oku
   const searchParams = useSearchParams();
+  // Zustand auth store'dan giris fonksiyonu ve durum bilgilerini al
   const { login, isLoading, error, clearError } = useAuthStore();
 
+  // Aktif giris yontemi (e-posta, telefon veya OTP)
   const [loginMethod, setLoginMethod] = useState<"email" | "phone" | "otp">(
     "email"
   );
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Sifre goster/gizle
+  // Form alanlari icin state
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -33,10 +54,12 @@ export default function LoginPage() {
     otp: "",
     rememberMe: false,
   });
+  // Form dogrulama hata mesajlari
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
 
+  // Form alani degistiginde state'i guncelle ve ilgili dogrulama hatasini temizle
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
@@ -47,10 +70,12 @@ export default function LoginPage() {
     clearError();
   };
 
+  // Form gonderildiginde dogrulama yap ve giris API'sini cagir
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (loginMethod === "email") {
+      // Zod ile form verilerini dogrula
       const result = loginSchema.safeParse({
         email: formData.email,
         password: formData.password,
@@ -68,11 +93,12 @@ export default function LoginPage() {
       }
 
       try {
+        // Auth store uzerinden giris API'sine istek gonder
         await login({
           email: formData.email,
           password: formData.password,
         });
-        // Determine redirect after login succeeds (user is now set in store)
+        // Giris basarili olduktan sonra yonlendirme hedefini belirle
         const explicitCallback = searchParams.get("callbackUrl");
         if (explicitCallback) {
           router.push(explicitCallback);

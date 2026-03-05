@@ -1,3 +1,15 @@
+/**
+ * Admin Dashboard (Yonetim Paneli Ana Sayfasi)
+ *
+ * Bu sayfa yonetim panelinin ana gorunumunu olusturur. Icerir:
+ * - Ozet istatistik kartlari (ciro, muzayede, kullanici, teklif sayilari)
+ * - Ciro grafigi (alan grafigi), kategori dagilimi (pasta grafigi)
+ * - Haftalik teklif grafigi (bar grafigi), kullanici buyumesi (cizgi grafigi)
+ * - Son muzayedeler tablosu
+ * - Hizli istatistik kartlari (onay bekleyen, aktif muzayedeler, aktif kullanicilar, uptime)
+ *
+ * Veriler useAdminDashboard hook'undan cekilir; API yaniti yoksa mock veri kullanilir.
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -38,7 +50,9 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAdminDashboard } from "@/hooks/use-dashboard";
 
-// Fallback data for charts (used when API data is loading or unavailable)
+// --- Mock (yedek) veriler: API'den veri gelmediginde grafiklerde kullanilir ---
+
+// Aylik ciro ve teklif sayisi verisi (alan grafigi icin)
 const revenueData = [
   { month: "Oca", revenue: 450000, bids: 3200 },
   { month: "Sub", revenue: 580000, bids: 4100 },
@@ -54,6 +68,7 @@ const revenueData = [
   { month: "Ara", revenue: 1100000, bids: 8400 },
 ];
 
+// Haftalik teklif sayisi verisi (bar grafigi icin)
 const weeklyBidData = [
   { day: "Pzt", bids: 420 },
   { day: "Sal", bids: 380 },
@@ -64,6 +79,7 @@ const weeklyBidData = [
   { day: "Paz", bids: 750 },
 ];
 
+// Aylik kullanici buyume verisi (cizgi grafigi icin)
 const userGrowthData = [
   { month: "Oca", users: 42000 },
   { month: "Sub", users: 43500 },
@@ -79,6 +95,7 @@ const userGrowthData = [
   { month: "Ara", users: 52800 },
 ];
 
+// Muzayede kategorilerinin yuzdelik dagilimi (pasta grafigi icin)
 const categoryDistribution = [
   { name: "Mucevher", value: 28, color: "#D4A843" },
   { name: "Luks Saat", value: 22, color: "#F97316" },
@@ -88,6 +105,7 @@ const categoryDistribution = [
   { name: "Diger", value: 5, color: "#6B7280" },
 ];
 
+// Son muzayedeler tablosu icin ornek veriler
 const recentAuctions = [
   {
     id: "1",
@@ -136,6 +154,7 @@ const recentAuctions = [
   },
 ];
 
+// Muzayede durumuna gore Badge renk varyanti eslestirmesi
 const statusBadgeMap: Record<string, "live" | "warning" | "secondary" | "success"> = {
   active: "live",
   ending_soon: "warning",
@@ -143,6 +162,7 @@ const statusBadgeMap: Record<string, "live" | "warning" | "secondary" | "success
   ended: "success",
 };
 
+// Muzayede durumuna gore Turkce etiket eslestirmesi
 const statusLabelMap: Record<string, string> = {
   active: "Aktif",
   ending_soon: "Bitiyor",
@@ -152,9 +172,13 @@ const statusLabelMap: Record<string, string> = {
 
 export default function AdminDashboardPage() {
   const t = useTranslations("admin");
-  const [chartPeriod, setChartPeriod] = useState<"weekly" | "monthly">("monthly");
+  const [chartPeriod, setChartPeriod] = useState<"weekly" | "monthly">("monthly"); // Grafik periyodu secimi (haftalik/aylik)
+
+  // API'den dashboard istatistiklerini, grafik verilerini ve son muzayedeleri ceker
   const { data: dashboardData } = useAdminDashboard();
 
+  // --- Ozet Istatistik Kartlari ---
+  // API'den gelen stats verisi kullanilir, yoksa varsayilan degerler gosterilir
   const stats = dashboardData?.stats;
   const statCards = [
     {
@@ -191,15 +215,17 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  const chartRevenue = dashboardData?.revenueData || revenueData;
-  const chartBids = dashboardData?.weeklyBidData || weeklyBidData;
-  const chartUsers = dashboardData?.userGrowthData || userGrowthData;
-  const chartCategories = dashboardData?.categoryDistribution || categoryDistribution;
-  const latestAuctions = dashboardData?.recentAuctions || recentAuctions;
+  // --- Grafik verileri: API verisini kullan, yoksa mock veriye geri don ---
+  const chartRevenue = dashboardData?.revenueData || revenueData; // Ciro grafigi verisi
+  const chartBids = dashboardData?.weeklyBidData || weeklyBidData; // Teklif grafigi verisi
+  const chartUsers = dashboardData?.userGrowthData || userGrowthData; // Kullanici buyume verisi
+  const chartCategories = dashboardData?.categoryDistribution || categoryDistribution; // Kategori dagilimi verisi
+  const latestAuctions = dashboardData?.recentAuctions || recentAuctions; // Son muzayedeler listesi
 
+  // --- JSX Render ---
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-4 lg:p-8">
-      {/* Page Header */}
+      {/* --- Sayfa Basligi: Dashboard baslik ve haftalik/aylik periyod secim butonlari --- */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold">{t("dashboard")}</h1>
@@ -225,7 +251,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {/* --- Istatistik Kartlari: Ciro, muzayede, kullanici ve teklif sayilari ile degisim oranlari --- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => (
           <Card key={stat.title}>
@@ -262,9 +288,9 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* Charts Row */}
+      {/* --- Birinci Grafik Satiri: Ciro grafigi (2/3 genislik) + Kategori dagilimi (1/3 genislik) --- */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* Revenue Chart */}
+        {/* --- Ciro Grafigi: Aylik ciro trendini gosteren alan grafigi (gradient dolgulu) --- */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">{t("revenueChart")}</CardTitle>
@@ -305,7 +331,7 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Category Distribution */}
+        {/* --- Kategori Dagilimi: Muzayede kategorilerinin yuzdelik oranlarini gosteren pasta grafigi --- */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Kategori Dagilimi</CardTitle>
@@ -358,9 +384,9 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Second Charts Row */}
+      {/* --- Ikinci Grafik Satiri: Teklif grafigi (sol) + Kullanici buyumesi (sag) --- */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Bid Chart */}
+        {/* --- Haftalik Teklif Grafigi: Gun bazinda teklif sayilarini gosteren bar grafigi --- */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("bidChart")}</CardTitle>
@@ -390,7 +416,7 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* User Growth Chart */}
+        {/* --- Kullanici Buyume Grafigi: Aylik uye sayisi trendini gosteren cizgi grafigi --- */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("userChart")}</CardTitle>
@@ -429,7 +455,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Auctions Table */}
+      {/* --- Son Muzayedeler Tablosu: Baslik, kategori, guncel teklif, teklif sayisi, bitis tarihi, durum ve islem butonlari --- */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">{t("recentAuctions")}</CardTitle>
@@ -497,6 +523,7 @@ export default function AdminDashboardPage() {
                         {statusLabelMap[auction.status]}
                       </Badge>
                     </td>
+                    {/* Islem butonlari: goruntule, onayla, reddet, diger secenekler */}
                     <td className="py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -521,7 +548,7 @@ export default function AdminDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Quick Stats */}
+      {/* --- Hizli Istatistik Kartlari: Onay bekleyen, aktif muzayedeler, aktif kullanicilar ve sistem uptime --- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-amber-500/10 to-amber-500/5">
           <CardContent className="p-4">

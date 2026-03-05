@@ -1,3 +1,18 @@
+/**
+ * Ana Sayfa (Home Page)
+ *
+ * Platformun giris sayfasidir. Ziyaretcilere ve kullanicilara platformun
+ * genel gorunumunu sunar.
+ *
+ * Bolumler:
+ * - Hero: Baslik, aciklama, CTA butonlari ve one cikan muzayede onizlemesi
+ * - Istatistikler: Platform sayisal verileri (toplam muzayede, teklif, uye, hacim)
+ * - One Cikan Muzayedeler: API'den cekilen vitrin muzayedeleri
+ * - Kategoriler: Muzayede kategorileri (mucevher, saat, otomobil, sanat vb.)
+ * - Yaklasan Muzayedeler: Henuz baslamayan muzayedeler ve geri sayim
+ * - Neden Biz: Platformun avantajlari (guvenlik, dogrulama, canli teklif, destek)
+ * - CTA: Kayit olma ve muzayede kesfetme cagrisi
+ */
 "use client";
 
 import React from "react";
@@ -29,6 +44,7 @@ import { CountdownTimer } from "@/components/auction/countdown-timer";
 import { formatCurrency } from "@/lib/utils";
 import { useFeaturedAuctions, useUpcomingAuctions, useAuctionCategories } from "@/hooks/use-auction";
 
+// Kategori ID'leri ile Lucide ikon bilesenleri arasindaki eslestirme
 const categoryIcons: Record<string, typeof Gem> = {
   jewelry: Gem,
   watches: Watch,
@@ -38,6 +54,7 @@ const categoryIcons: Record<string, typeof Gem> = {
   electronics: Smartphone,
 };
 
+// API'den kategori verisi yuklenemediginde kullanilacak varsayilan kategoriler
 const defaultCategories = [
   { id: "jewelry", name: "Mucevher", icon: Gem },
   { id: "watches", name: "Luks Saat", icon: Watch },
@@ -47,6 +64,7 @@ const defaultCategories = [
   { id: "electronics", name: "Elektronik", icon: Smartphone },
 ];
 
+// Muzayede karti yukleniyor durumunda gosterilen iskelet (skeleton) bileseni
 function AuctionCardSkeleton() {
   return (
     <Card className="overflow-hidden">
@@ -64,6 +82,7 @@ function AuctionCardSkeleton() {
   );
 }
 
+// Yaklasan muzayede karti icin iskelet (skeleton) bileseni
 function UpcomingAuctionSkeleton() {
   return (
     <Card className="overflow-hidden">
@@ -89,15 +108,18 @@ export default function HomePage() {
   const t = useTranslations("home");
   const tCommon = useTranslations("common");
 
+  // API'den one cikan muzayedeleri, yaklasan muzayedeleri ve kategorileri cek
   const { data: featuredAuctions, isLoading: featuredLoading } = useFeaturedAuctions();
   const { data: upcomingAuctions, isLoading: upcomingLoading } = useUpcomingAuctions();
   const { data: apiCategories } = useAuctionCategories();
 
+  // API kategorilerine ikon ekle; API'den veri gelmezse varsayilanlari kullan
   const categories = apiCategories?.map((cat) => ({
     ...cat,
     icon: categoryIcons[cat.id] || Gem,
   })) || defaultCategories;
 
+  // Hero bolumunde gosterilecek ilk one cikan muzayede
   const heroAuction = featuredAuctions?.[0];
 
   return (

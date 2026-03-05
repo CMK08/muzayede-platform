@@ -1,3 +1,17 @@
+/**
+ * Header (Ust Menu) Bileseni
+ *
+ * Uygulamanin tum sayfalarda gorunen ust navigasyon cubugunu olusturur.
+ * Icerir:
+ * - Ust bilgi cubugu (yardim hatti, calisma saatleri - sadece masaustu)
+ * - Logo ve ana navigasyon linkleri
+ * - Arama cubugu (acilir/kapanir)
+ * - Tema degistirme (acik/koyu mod)
+ * - Dil secici (Turkce, English, Arapca)
+ * - Bildirim ikonu (giris yapmis kullanicilar icin)
+ * - Kullanici menusu veya giris/kayit butonlari
+ * - Mobil navigasyon menusu
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -24,6 +38,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { MobileNav } from "./mobile-nav";
 
+// Desteklenen diller listesi - dil secici acilir menude kullanilir
 const languages = [
   { code: "tr", label: "Turkce", flag: "🇹🇷" },
   { code: "en", label: "English", flag: "🇬🇧" },
@@ -31,16 +46,25 @@ const languages = [
 ];
 
 export function Header() {
+  // Aktif dil kodu (tr, en, ar)
   const locale = useLocale();
+  // Genel (common) ceviri fonksiyonu
   const t = useTranslations("common");
+  // Tema bilgisi ve degistirme fonksiyonu (acik/koyu mod)
   const { theme, setTheme } = useTheme();
+  // Kimlik dogrulama bilgileri - kullanici, giris durumu ve cikis fonksiyonu
   const { user, isAuthenticated, logout } = useAuthStore();
 
+  // Arama cubugunun gorunurluk durumu
   const [showSearch, setShowSearch] = useState(false);
+  // Dil secici acilir menunun gorunurluk durumu
   const [showLangMenu, setShowLangMenu] = useState(false);
+  // Kullanici profil acilir menusunun gorunurluk durumu
   const [showUserMenu, setShowUserMenu] = useState(false);
+  // Mobil navigasyon menusunun gorunurluk durumu
   const [showMobileNav, setShowMobileNav] = useState(false);
 
+  // --- Ana Navigasyon Ogeleri ---
   const navItems = [
     { href: `/${locale}`, label: t("home") },
     { href: `/${locale}/auctions`, label: t("auctions") },
@@ -48,10 +72,15 @@ export function Header() {
     { href: `/${locale}/auctions?category=featured`, label: t("featured") },
   ];
 
+  // --- JSX Render ---
   return (
     <>
+      {/* --- Yapisan (sticky) Header ---
+          Sayfa kaydirildiginda ust kisimda sabit kalir, arka plan bulanik efekti uygulanir */}
       <header className="sticky top-0 z-40 w-full border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--background)]/60">
-        {/* Top Bar */}
+        {/* --- Ust Bilgi Cubugu ---
+            Karsilama mesaji, yardim hatti ve calisma saatlerini gosterir.
+            Sadece masaustunde (lg ve uzeri) gorunur */}
         <div className="hidden border-b border-[var(--border)] bg-navy-950 text-white lg:block">
           <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs">
             <p>{t("welcomeMessage")}</p>
@@ -63,11 +92,12 @@ export function Header() {
           </div>
         </div>
 
-        {/* Main Header */}
+        {/* --- Ana Header Alani ---
+            Logo, navigasyon linkleri ve sag taraftaki aksiyonlari icerir */}
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-          {/* Left: Logo + Nav */}
+          {/* --- Sol Kisim: Logo ve Navigasyon --- */}
           <div className="flex items-center gap-8">
-            {/* Mobile Menu Button */}
+            {/* Mobil Menu Butonu - sadece kucuk ekranlarda gorunur */}
             <button
               className="lg:hidden"
               onClick={() => setShowMobileNav(true)}
@@ -75,7 +105,9 @@ export function Header() {
               <Menu className="h-6 w-6" />
             </button>
 
-            {/* Logo */}
+            {/* --- Logo ---
+                Cekic ikonu ve "Muzayede" marka ismi.
+                Marka ismi sadece sm ve uzerinde gorunur */}
             <Link href={`/${locale}`} className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500">
                 <Gavel className="h-5 w-5 text-white" />
@@ -85,7 +117,8 @@ export function Header() {
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
+            {/* --- Masaustu Navigasyon Linkleri ---
+                Ana sayfa, muzayedeler, yaklasan, one cikanlar */}
             <nav className="hidden items-center gap-1 lg:flex">
               {navItems.map((item) => (
                 <Link
@@ -99,9 +132,10 @@ export function Header() {
             </nav>
           </div>
 
-          {/* Right: Actions */}
+          {/* --- Sag Kisim: Aksiyon Butonlari --- */}
           <div className="flex items-center gap-2">
-            {/* Search Toggle */}
+            {/* --- Arama Butonu ---
+                Tiklandiginda header altinda arama cubugu acilir/kapanir */}
             <Button
               variant="ghost"
               size="icon"
@@ -111,7 +145,9 @@ export function Header() {
               <Search className="h-5 w-5" />
             </Button>
 
-            {/* Theme Toggle */}
+            {/* --- Tema Degistirme Butonu ---
+                Gunes (acik mod) ve Ay (koyu mod) ikonlari arasinda gecis yapar.
+                CSS transition ile ikon animasyonu uygulanir */}
             <Button
               variant="ghost"
               size="icon"
@@ -121,7 +157,10 @@ export function Header() {
               <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
-            {/* Language Selector */}
+            {/* --- Dil Secici (Dropdown) ---
+                Dunya ikonu tiklandiginda dil listesini acar.
+                Secilen dil vurgulanir; tiklama ile dil degistirilir.
+                Arka plandaki gorunmez katman, menu disina tiklandiginda kapatir */}
             <div className="relative">
               <Button
                 variant="ghost"
@@ -133,6 +172,7 @@ export function Header() {
 
               {showLangMenu && (
                 <>
+                  {/* Menu disina tiklandiginda kapatmak icin gorunmez katman */}
                   <div
                     className="fixed inset-0 z-40"
                     onClick={() => setShowLangMenu(false)}
@@ -157,7 +197,9 @@ export function Header() {
               )}
             </div>
 
-            {/* Notifications */}
+            {/* --- Bildirim Ikonu ---
+                Sadece giris yapmis kullanicilar icin gorunur.
+                Sag ustte kirmizi rozet ile okunmamis bildirim sayisini gosterir */}
             {isAuthenticated && (
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
@@ -167,13 +209,17 @@ export function Header() {
               </Button>
             )}
 
-            {/* User Menu / Auth Buttons */}
+            {/* --- Kullanici Menusu / Giris-Kayit Butonlari ---
+                Giris yapmissa: Avatar, isim ve dropdown menu gosterilir
+                Giris yapmamissa: Giris Yap ve Kayit Ol butonlari gosterilir */}
             {isAuthenticated && user ? (
               <div className="relative">
+                {/* Kullanici avatari ve ismi - tiklandiginda dropdown acilir */}
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--muted)]"
                 >
+                  {/* Avatar: Isim ve soyismin bas harflerinden olusur */}
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-sm font-medium text-white">
                     {user.firstName[0]}
                     {user.lastName[0]}
@@ -184,13 +230,16 @@ export function Header() {
                   <ChevronDown className="hidden h-4 w-4 md:block" />
                 </button>
 
+                {/* --- Kullanici Dropdown Menusu --- */}
                 {showUserMenu && (
                   <>
+                    {/* Menu disina tiklandiginda kapatmak icin gorunmez katman */}
                     <div
                       className="fixed inset-0 z-40"
                       onClick={() => setShowUserMenu(false)}
                     />
                     <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg">
+                      {/* Kullanici bilgileri baslik alani */}
                       <div className="border-b border-[var(--border)] px-3 py-2">
                         <p className="text-sm font-medium">
                           {user.firstName} {user.lastName}
@@ -200,6 +249,7 @@ export function Header() {
                         </p>
                       </div>
 
+                      {/* Kontrol paneli linki */}
                       <Link
                         href={`/${locale}/dashboard`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
@@ -209,6 +259,7 @@ export function Header() {
                         {t("dashboard")}
                       </Link>
 
+                      {/* Favoriler linki */}
                       <Link
                         href={`/${locale}/favorites`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
@@ -218,6 +269,7 @@ export function Header() {
                         {t("watchlist")}
                       </Link>
 
+                      {/* Tekliflerim linki */}
                       <Link
                         href={`/${locale}/my-bids`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
@@ -227,6 +279,7 @@ export function Header() {
                         {t("myBids")}
                       </Link>
 
+                      {/* Ayarlar linki */}
                       <Link
                         href={`/${locale}/profile`}
                         className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted)]"
@@ -236,6 +289,8 @@ export function Header() {
                         {t("settings")}
                       </Link>
 
+                      {/* --- Admin Paneli Linki ---
+                          Sadece admin rolune sahip kullanicilar icin gorunur */}
                       {user.role === "admin" && (
                         <>
                           <div className="my-1 border-t border-[var(--border)]" />
@@ -250,6 +305,8 @@ export function Header() {
                         </>
                       )}
 
+                      {/* --- Cikis Yap Butonu ---
+                          Menuyu kapatir ve oturumu sonlandirir */}
                       <div className="my-1 border-t border-[var(--border)]" />
                       <button
                         onClick={() => {
@@ -266,6 +323,7 @@ export function Header() {
                 )}
               </div>
             ) : (
+              /* --- Giris Yapmamis Kullanicilar Icin Butonlar --- */
               <div className="flex items-center gap-2">
                 <Link href={`/${locale}/login`}>
                   <Button variant="ghost" size="sm">
@@ -280,7 +338,9 @@ export function Header() {
           </div>
         </div>
 
-        {/* Search Bar (Expandable) */}
+        {/* --- Genisleyen Arama Cubugu ---
+            showSearch true oldugunda header altinda kayarak acilir.
+            Escape tusuna basildiginda kapatilir */}
         {showSearch && (
           <div className="border-t border-[var(--border)] px-4 py-3 animate-slide-down">
             <div className="mx-auto max-w-2xl">
@@ -297,7 +357,8 @@ export function Header() {
         )}
       </header>
 
-      {/* Mobile Navigation */}
+      {/* --- Mobil Navigasyon Bileseni ---
+          Kucuk ekranlarda tam ekran navigasyon menusu gosterir */}
       <MobileNav
         isOpen={showMobileNav}
         onClose={() => setShowMobileNav(false)}

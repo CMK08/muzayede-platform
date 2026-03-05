@@ -1,3 +1,16 @@
+/**
+ * Tekliflerim Sayfasi (My Bids Page)
+ *
+ * Kullanicinin verdigi tum teklifleri listeleyen ve yonetmesini saglayan sayfadir.
+ *
+ * Ozellikler:
+ * - Teklif listesini sekmelere gore filtreleme (tumu, aktif, kazanilan, kaybedilen)
+ * - Ozet istatistik kartlari (toplam, aktif, kazanilan, kaybedilen teklif sayilari)
+ * - Her teklif icin detay bilgisi (teklif tutari, guncel fiyat, kalan sure)
+ * - Teklif artirma dialog penceresi
+ * - Teklif durumu gostergesi (aktif, kazanildi, kaybedildi, asildi)
+ * - En yuksek teklif sahibi bilgilendirmesi
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -29,6 +42,7 @@ import { AuctionImage } from "@/components/auction/auction-image";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 import { useUserBids } from "@/hooks/use-bids";
 
+// Teklif ogesi tipini tanimlar
 interface BidItem {
   id: string;
   auctionId: string;
@@ -42,6 +56,7 @@ interface BidItem {
   category: string;
 }
 
+// Her teklif durumu icin etiket, badge rengi ve ikon eslestirmesi
 const statusConfig: Record<
   string,
   { label: string; variant: "live" | "success" | "destructive" | "warning"; icon: typeof Gavel }
@@ -54,16 +69,19 @@ const statusConfig: Record<
 
 export default function MyBidsPage() {
   const t = useTranslations("common");
-  void t; // TODO: replace hardcoded strings with t() calls
+  void t; // TODO: sabit yazilmis metinleri t() cagrilariyla degistir
   const locale = useLocale();
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState("all"); // Aktif sekme filtresi
+  // Teklif artirma dialog penceresi durumu
   const [increaseBidDialog, setIncreaseBidDialog] = useState<{
     open: boolean;
     bid: BidItem | null;
   }>({ open: false, bid: null });
-  const [newBidAmount, setNewBidAmount] = useState("");
+  const [newBidAmount, setNewBidAmount] = useState(""); // Yeni teklif tutari
 
+  // API'den kullanicinin tum tekliflerini cek
   const { data: bidsData, isLoading } = useUserBids(1, 50);
+  // API verisini BidItem formatina donustur (farkli API yapilarini normalize eder)
   const allBids: BidItem[] = (bidsData?.data || []).map((b) => {
     const bid = b as unknown as Record<string, unknown>;
     const auction = (bid.auction || {}) as Record<string, unknown>;
@@ -82,6 +100,7 @@ export default function MyBidsPage() {
     };
   });
 
+  // Secili sekmeye gore teklifleri filtrele
   const filterBids = (tab: string): BidItem[] => {
     switch (tab) {
       case "active":
@@ -99,11 +118,12 @@ export default function MyBidsPage() {
 
   const bids = filterBids(activeTab);
 
+  // Ozet istatistik sayaclari
   const activeBidsCount = allBids.filter(
     (b) => b.status === "active" || b.status === "outbid"
-  ).length;
-  const wonCount = allBids.filter((b) => b.status === "won").length;
-  const lostCount = allBids.filter((b) => b.status === "lost").length;
+  ).length; // Aktif ve asilmis teklifler
+  const wonCount = allBids.filter((b) => b.status === "won").length; // Kazanilan teklifler
+  const lostCount = allBids.filter((b) => b.status === "lost").length; // Kaybedilen teklifler
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -180,6 +200,7 @@ export default function MyBidsPage() {
             ) : (
               bids.map((bid) => {
                 const config = statusConfig[bid.status];
+                // Kullanicinin teklifi su anki en yuksek teklif mi kontrol et
                 const isLeading =
                   bid.status === "active" &&
                   bid.myBidAmount >= bid.currentPrice;

@@ -1,3 +1,11 @@
+/**
+ * Admin Kullanici Yonetimi Sayfasi
+ *
+ * Bu sayfa, platform yoneticilerinin tum kullanicilari goruntulemesini,
+ * filtrelemesini, duzenlemesini ve kara listeye almasini saglar.
+ * Kullanici listesi once API'den cekilir, API verisi yoksa mock veri kullanilir.
+ * Sayfalama, arama, rol/KYC/durum filtreleme ve toplu islem ozellikleri icerir.
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -29,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils";
 import { useAdminUsers } from "@/hooks/use-dashboard";
 
+/** Kullanici kaydinin tip tanimi - tabloda gosterilen tum alanlari icerir */
 interface UserRecord {
   id: string;
   firstName: string;
@@ -46,6 +55,10 @@ interface UserRecord {
   [key: string]: unknown;
 }
 
+/**
+ * API'den veri gelmediginde kullanilacak ornek kullanici verileri.
+ * Gelistirme ve test amaclidir; uretimde API verisi tercih edilir.
+ */
 const mockUsers: UserRecord[] = [
   {
     id: "USR-001",
@@ -199,6 +212,10 @@ const mockUsers: UserRecord[] = [
   },
 ];
 
+/**
+ * Kullanici rollerine gore Badge etiketi ve renk varyanti eslestirmesi.
+ * Tabloda her kullanicinin rolu bu yapilandirmaya gore gorsellestirilir.
+ */
 const roleConfig: Record<
   string,
   { label: string; variant: "default" | "secondary" | "warning" | "destructive" }
@@ -212,6 +229,10 @@ const roleConfig: Record<
   user: { label: "Kullanici", variant: "secondary" },
 };
 
+/**
+ * KYC (Kimlik Dogrulama) durumuna gore Badge etiketi ve renk varyanti eslestirmesi.
+ * verified/approved = yesil, pending = sari, rejected = kirmizi, not_submitted = gri
+ */
 const kycConfig: Record<
   string,
   { label: string; variant: "success" | "warning" | "destructive" | "secondary" }
@@ -224,6 +245,10 @@ const kycConfig: Record<
   "not-submitted": { label: "Gonderilmedi", variant: "secondary" },
 };
 
+/**
+ * Guven skoruna gore renk varyantini belirler.
+ * 70+ = yesil (guvenilir), 40-69 = sari (orta), 0-39 = kirmizi (dusuk guven)
+ */
 function getTrustVariant(score: number): "success" | "warning" | "destructive" {
   if (score >= 70) return "success";
   if (score >= 40) return "warning";
@@ -232,19 +257,24 @@ function getTrustVariant(score: number): "success" | "warning" | "destructive" {
 
 export default function AdminUsersPage() {
   const t = useTranslations("admin");
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [kycFilter, setKycFilter] = useState("");
-  const [activeFilter, setActiveFilter] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+
+  // --- Filtre ve sayfalama state'leri ---
+  const [search, setSearch] = useState(""); // Arama kutusu metni (isim, e-posta veya ID ile arama)
+  const [roleFilter, setRoleFilter] = useState(""); // Rol filtreleme (admin, seller, user vb.)
+  const [kycFilter, setKycFilter] = useState(""); // KYC durumu filtreleme (verified, pending, rejected)
+  const [activeFilter, setActiveFilter] = useState(""); // Aktiflik durumu filtreleme (aktif/pasif)
+  const [currentPage, setCurrentPage] = useState(1); // Mevcut sayfa numarasi
+  const [pageSize, setPageSize] = useState(10); // Sayfa basina gosterilecek kayit sayisi
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set()); // Toplu islem icin secili satirlar
+
+  // --- Kara liste dialog state'leri ---
   const [blacklistDialog, setBlacklistDialog] = useState<{
     open: boolean;
     user: UserRecord | null;
-  }>({ open: false, user: null });
-  const [blacklistReason, setBlacklistReason] = useState("");
+  }>({ open: false, user: null }); // Kara liste onay dialogunun acik/kapali durumu ve hedef kullanici
+  const [blacklistReason, setBlacklistReason] = useState(""); // Kara listeye alma sebebi
 
+  // API'den kullanici listesini ceker. Sayfalama, arama ve rol filtresi sunucu tarafinda uygulanir.
   const { data: usersResponse } = useAdminUsers({
     page: currentPage,
     limit: pageSize,
@@ -252,6 +282,7 @@ export default function AdminUsersPage() {
     role: roleFilter || "",
   });
 
+  // API'den gelen ham veriyi UserRecord formatina donusturur
   const apiUsers: UserRecord[] = (usersResponse?.data || []).map((u: Record<string, unknown>) => {
     const profile = (u.profile || {}) as Record<string, unknown>;
     return {
@@ -271,8 +302,10 @@ export default function AdminUsersPage() {
     };
   });
 
+  // API'den veri geldiyse onu kullan, gelmediyse mock verilere geri don
   const allUsers = apiUsers.length > 0 ? apiUsers : mockUsers;
 
+  // Istemci tarafinda filtreleme: arama, rol, KYC ve aktiflik durumuna gore
   const filteredData = allUsers.filter((user) => {
     const matchesSearch =
       !search ||
@@ -290,12 +323,14 @@ export default function AdminUsersPage() {
     return matchesSearch && matchesRole && matchesKyc && matchesActive;
   });
 
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+  // --- Sayfalama hesaplamalari ---
+  const totalPages = Math.ceil(filteredData.length / pageSize); // Toplam sayfa sayisi
   const paginatedData = filteredData.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
-  );
+  ); // Mevcut sayfadaki veriler
 
+  // Tek bir satirin secimini degistirir (toggle). Toplu islemler icin kullanilir.
   const handleRowSelect = (index: number) => {
     const newSelected = new Set(selectedRows);
     if (newSelected.has(index)) {
@@ -306,6 +341,7 @@ export default function AdminUsersPage() {
     setSelectedRows(newSelected);
   };
 
+  // Sayfadaki tum satirlari secer veya secimi kaldirir (toggle)
   const handleSelectAll = () => {
     if (selectedRows.size === paginatedData.length) {
       setSelectedRows(new Set());
@@ -314,6 +350,8 @@ export default function AdminUsersPage() {
     }
   };
 
+  // --- Tablo sutun tanimlari ---
+  // Her sutun icin anahtar, baslik, siralama ve ozel render fonksiyonu tanimlanir
   const columns: Column<UserRecord>[] = [
     {
       key: "name",
@@ -393,6 +431,8 @@ export default function AdminUsersPage() {
       key: "actions",
       header: t("actions"),
       className: "text-right w-36",
+      // Her satir icin islem butonlari: profil goruntuleme, rol duzenleme ve kara listeye alma
+      // Admin rolundeki kullanicilar kara listeye alinamaz
       render: (item) => (
         <div className="flex items-center justify-end gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Profili Gor">
@@ -417,9 +457,10 @@ export default function AdminUsersPage() {
     },
   ];
 
+  // --- JSX Render ---
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 lg:p-8">
-      {/* Page Header */}
+      {/* --- Sayfa Basligi: Baslik, aciklama ve aksiyon butonlari (CSV aktar, kullanici ekle) --- */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold">Kullanici Yonetimi</h1>
@@ -439,7 +480,7 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* --- Ozet Istatistik Kartlari: Toplam kullanici, KYC dogrulanmis, satici sayisi, pasif hesaplar --- */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
           <p className="text-2xl font-bold">{allUsers.length}</p>
@@ -471,7 +512,7 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Data Table */}
+      {/* --- Kullanici Veri Tablosu: Arama, filtreler, sayfalama ve toplu islem destegi --- */}
       <DataTable
         columns={columns}
         data={paginatedData}
@@ -553,7 +594,7 @@ export default function AdminUsersPage() {
         }
       />
 
-      {/* Blacklist Dialog */}
+      {/* --- Kara Liste Onay Dialogu: Kullaniciyi kara listeye almadan once sebep girmesini ister --- */}
       <Dialog
         open={blacklistDialog.open}
         onOpenChange={(open) =>

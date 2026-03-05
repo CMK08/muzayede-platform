@@ -1,70 +1,128 @@
 'use client';
 
+/**
+ * ============================================================================
+ * CANLI MÜZAYEDE KONTROL PANELİ (Auctioneer Control Panel)
+ * ============================================================================
+ *
+ * Bu sayfa, admin veya müzayede evi yetkilileri tarafından canlı müzayedeleri
+ * yönetmek için kullanılır. Temel işlevleri:
+ *
+ * 1. CANLI YAYIN (WebRTC):
+ *    - Kameradan video ve ses yakalama
+ *    - WebRTC üzerinden izleyicilere canlı yayın gönderme
+ *    - Socket.IO ile sinyal (signaling) iletişimi
+ *
+ * 2. MÜZAYEDE OTURUMU:
+ *    - Oturum oluşturma / başlatma / sonlandırma
+ *    - Lot açma / satma / geçme işlemleri
+ *    - "Bir kez!" / "İki kez!" müzayedeci çağrıları
+ *
+ * 3. API ENTEGRASYONU:
+ *    - Auctioneer API'si live-service (port 3010) üzerinde çalışır
+ *    - API gateway (port 4000) /api/v1/auctioneer/* route'unu proxy eder
+ *    - WebSocket bağlantısı doğrudan live-service'e (port 3010) yapılır
+ *
+ * KULLANIM AKIŞI:
+ *    1. Aktif müzayedelerden birini seç veya ID gir
+ *    2. "Oturum Oluştur" ile müzayede oturumu başlat
+ *    3. "Yayını Başlat" ile kamerayı aç ve WebRTC yayını başlat
+ *    4. Lotları sırayla aç, teklifleri takip et
+ *    5. "Bir kez!" → "İki kez!" → "Satıldı!" akışını takip et
+ *    6. Tüm lotlar bitince oturumu sonlandır
+ *
+ * ============================================================================
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 
+// --------------------------------------------------------------------------
+// TİP TANIMLARI
+// --------------------------------------------------------------------------
+
+/**
+ * Müzayede oturumu - canlı müzayede sırasında oluşturulan oturum bilgisi.
+ * Her oturum bir müzayedeye bağlıdır ve o müzayedenin lotlarını içerir.
+ */
 interface AuctionSession {
-  id: string;
-  auctionId: string;
-  status: string;
-  currentLotIndex: number;
-  lots: Array<{
+  id: string;            // Oturum benzersiz kimliği
+  auctionId: string;     // Bağlı müzayede ID'si
+  status: string;        // Oturum durumu: CREATED, ACTIVE, ENDED
+  currentLotIndex: number; // Şu an açık olan lot sırası
+  lots: Array<{          // Müzayededeki lot (ürün) listesi
     id: string;
     lotNumber: number;
-    status: string;
+    status: string;      // PENDING, ACTIVE, SOLD, PASSED
     product: { title: string };
   }>;
 }
 
 /**
- * Admin Auctioneer Control Panel
- * Used by admins/auction houses to manage live auctions:
- * - Start/stop streaming (WebRTC broadcaster)
- * - Open/close lots
- * - Make going-once / going-twice calls
- * - Accept phone/absentee bids
- * - Manage chat
+ * API'den gelen müzayede listesi elemanı.
+ * Aktif/canlı müzayedeleri listelemek için kullanılır.
  */
 interface LiveAuction {
   id: string;
   title: string;
-  status: string;
-  type: string;
-  bidCount: number;
+  status: string;        // LIVE, PUBLISHED, COMPLETED vb.
+  type: string;          // english, dutch, sealed_bid vb.
+  bidCount: number;      // Toplam teklif sayısı
 }
+
+// --------------------------------------------------------------------------
+// ANA KOMPONENT
+// --------------------------------------------------------------------------
 
 export default function LiveAuctionControlPage() {
   const searchParams = useSearchParams();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const localStreamRef = useRef<MediaStream | null>(null);
 
-  const [token, setToken] = useState('');
-  const [auctionId, setAuctionId] = useState('');
-  const [session, setSession] = useState<AuctionSession | null>(null);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [viewerCount, setViewerCount] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [liveAuctions, setLiveAuctions] = useState<LiveAuction[]>([]);
+  // --- Referanslar (DOM ve bağlantılar) ---
+  const videoRef = useRef<HTMLVideoElement>(null);         // Kamera önizleme video elementi
+  const socketRef = useRef<Socket | null>(null);           // Socket.IO bağlantısı (WebRTC signaling için)
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map()); // Her izleyici için ayrı WebRTC bağlantısı
+  const localStreamRef = useRef<MediaStream | null>(null); // Kameradan gelen medya akışı (video + ses)
 
+  // --- State değişkenleri ---
+  const [token, setToken] = useState('');                  // JWT erişim token'ı (localStorage'dan alınır)
+  const [auctionId, setAuctionId] = useState('');          // Seçilen müzayede ID'si
+  const [session, setSession] = useState<AuctionSession | null>(null); // Aktif oturum bilgisi
+  const [isStreaming, setIsStreaming] = useState(false);    // Yayın durumu (kamera açık mı?)
+  const [viewerCount, setViewerCount] = useState(0);       // Anlık izleyici sayısı
+  const [logs, setLogs] = useState<string[]>([]);          // Olay günlüğü mesajları
+  const [liveAuctions, setLiveAuctions] = useState<LiveAuction[]>([]); // API'den gelen aktif müzayedeler
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+
+  // --------------------------------------------------------------------------
+  // YARDIMCI FONKSİYONLAR
+  // --------------------------------------------------------------------------
+
+  /**
+   * Olay günlüğüne zaman damgalı mesaj ekler.
+   * Son 100 mesajı tutar, en yeni en üstte görünür.
+   */
   const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString('tr-TR');
     setLogs((prev) => [`[${timestamp}] ${message}`, ...prev.slice(0, 99)]);
   }, []);
 
+  // --------------------------------------------------------------------------
+  // SAYFA YÜKLENDİĞİNDE: Token ve müzayede listesi al
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
+    // localStorage'dan JWT token'ı al (login sırasında kaydedilmiş olmalı)
     const storedToken = localStorage.getItem('accessToken') || '';
     setToken(storedToken);
 
-    // Read auctionId from query params
+    // URL query parametresinden müzayede ID'si oku (örn: ?auctionId=xxx)
     const qsAuctionId = searchParams.get('auctionId');
     if (qsAuctionId) {
       setAuctionId(qsAuctionId);
     }
 
-    // Fetch live/published auctions
+    // API'den aktif/canlı müzayedeleri çek
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
     fetch(`${apiUrl}/auctions?status=LIVE`, {
       headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
@@ -73,63 +131,111 @@ export default function LiveAuctionControlPage() {
       .then((data) => {
         if (data.data) setLiveAuctions(data.data);
       })
-      .catch(() => {});
+      .catch(() => {
+        // LIVE müzayede yoksa PUBLISHED olanları da dene
+        fetch(`${apiUrl}/auctions?status=PUBLISHED`, {
+          headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.data) setLiveAuctions(data.data);
+          })
+          .catch(() => {});
+      });
   }, [searchParams]);
 
-  // Connect WebRTC signaling as broadcaster
+  // Sayfa kapanırken yayını ve bağlantıları temizle
+  useEffect(() => {
+    return () => {
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      peerConnectionsRef.current.forEach((pc) => pc.close());
+      socketRef.current?.disconnect();
+    };
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // WEBRTC YAYIN BAŞLATMA
+  // --------------------------------------------------------------------------
+
+  /**
+   * Canlı yayını başlatır:
+   * 1. Socket.IO ile live-service'e bağlanır (/webrtc namespace)
+   * 2. Kendini "broadcaster" (yayıncı) olarak kaydeder
+   * 3. Kamerayı açar
+   * 4. Yeni izleyiciler bağlandığında otomatik WebRTC bağlantısı kurar
+   */
   function startBroadcast() {
-    if (!auctionId || !token) {
-      addLog('Müzayede ID ve oturum gerekli');
+    if (!auctionId) {
+      addLog('Lütfen önce bir müzayede seçin veya ID girin');
       return;
     }
 
-    const socketUrl =
-      process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3010';
+    if (!token) {
+      addLog('Oturum bulunamadı - lütfen giriş yapın');
+      return;
+    }
+
+    setConnectionStatus('connecting');
+    addLog('Sinyal sunucusuna bağlanılıyor...');
+
+    // Socket.IO bağlantısı: doğrudan live-service'e (port 3010) yapılır
+    // NOT: API gateway WebSocket proxy desteklemez, bu yüzden direkt bağlantı gerekir
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3010';
 
     const socket = io(`${socketUrl}/webrtc`, {
-      auth: { token },
-      transports: ['websocket'],
+      auth: { token },                   // JWT token ile kimlik doğrulama
+      transports: ['websocket'],          // Sadece WebSocket kullan (polling değil)
+      reconnectionAttempts: 5,            // Bağlantı koparsa 5 kez dene
+      reconnectionDelay: 2000,            // Her deneme arasında 2 saniye bekle
     });
 
     socketRef.current = socket;
 
+    // --- Socket.IO Olay Dinleyicileri ---
+
+    // Bağlantı başarılı olduğunda
     socket.on('connect', () => {
+      setConnectionStatus('connected');
       addLog('WebRTC sinyal sunucusuna bağlandı');
+      // Kendimizi bu müzayedenin yayıncısı olarak kaydet
       socket.emit('register-broadcaster', {
         auctionId,
         userId: 'auctioneer',
       });
     });
 
+    // Yayıncı kaydı onaylandığında
     socket.on('broadcaster-registered', (data) => {
-      addLog(`Yayıncı olarak kaydedildi (${data.viewerCount} izleyici)`);
-      setViewerCount(data.viewerCount);
-      startCamera();
+      addLog(`Yayıncı olarak kaydedildi (${data.viewerCount || 0} izleyici)`);
+      setViewerCount(data.viewerCount || 0);
+      startCamera(); // Kamerayı aç
     });
 
+    // Yeni bir izleyici bağlandığında → ona video göndermek için WebRTC bağlantısı kur
     socket.on('new-viewer', async (data) => {
       addLog(`Yeni izleyici: ${data.viewerId} (toplam: ${data.viewerCount})`);
       setViewerCount(data.viewerCount);
       await createOfferForViewer(data.viewerId);
     });
 
+    // İzleyiciden SDP yanıtı geldiğinde → WebRTC el sıkışmasını tamamla
     socket.on('answer', async (data) => {
       const pc = peerConnectionsRef.current.get(data.viewerId);
       if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await pc.setRemoteDescription(data.sdp);
         addLog(`İzleyici yanıtı alındı: ${data.viewerId}`);
       }
     });
 
+    // İzleyiciden ICE adayı geldiğinde → ağ bağlantı bilgisini ekle
     socket.on('ice-candidate', (data) => {
       const pc = peerConnectionsRef.current.get(data.from);
       if (pc) {
-        pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(
-          console.error,
-        );
+        pc.addIceCandidate(data.candidate).catch(console.error);
       }
     });
 
+    // Bir izleyici ayrıldığında → o izleyicinin bağlantısını temizle
     socket.on('viewer-left', (data) => {
       setViewerCount(data.viewerCount);
       const pc = peerConnectionsRef.current.get(data.viewerId);
@@ -140,42 +246,81 @@ export default function LiveAuctionControlPage() {
       addLog(`İzleyici ayrıldı (kalan: ${data.viewerCount})`);
     });
 
+    // Bağlantı hatası
+    socket.on('connect_error', (err) => {
+      setConnectionStatus('disconnected');
+      addLog(`Bağlantı hatası: ${err.message}`);
+    });
+
+    // Sunucu taraflı hata
     socket.on('error', (data) => {
-      addLog(`Hata: ${data.message}`);
+      addLog(`Sunucu hatası: ${data.message}`);
+    });
+
+    // Bağlantı koptuğunda
+    socket.on('disconnect', (reason) => {
+      setConnectionStatus('disconnected');
+      addLog(`Bağlantı koptu: ${reason}`);
     });
   }
 
+  // --------------------------------------------------------------------------
+  // KAMERA VE MİKROFON AÇMA
+  // --------------------------------------------------------------------------
+
+  /**
+   * Kullanıcının kamerasını ve mikrofonunu açar.
+   * 720p video ve ses yakalar, video elementine bağlar.
+   * Tarayıcı izin isteyecektir (ilk kullanımda).
+   */
   async function startCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, frameRate: 30 },
-        audio: true,
+        video: { width: 1280, height: 720, frameRate: 30 }, // 720p, 30fps
+        audio: true,                                           // Mikrofon açık
       });
       localStreamRef.current = stream;
+
+      // Video elementine bağla (kamera önizlemesi)
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
       setIsStreaming(true);
-      addLog('Kamera ve mikrofon açıldı');
+      addLog('Kamera ve mikrofon açıldı - yayın aktif');
     } catch (err) {
-      addLog(`Kamera hatası: ${err}`);
+      addLog(`Kamera hatası: ${err}. Tarayıcı izinlerini kontrol edin.`);
     }
   }
 
+  // --------------------------------------------------------------------------
+  // WEBRTC TEKLİF (OFFER) OLUŞTURMA
+  // --------------------------------------------------------------------------
+
+  /**
+   * Yeni bir izleyici için WebRTC bağlantısı kurar.
+   * Her izleyici ayrı bir RTCPeerConnection alır (SFU benzeri yapı).
+   *
+   * Akış: Yayıncı → Offer gönder → İzleyici Answer döner → Bağlantı kurulur
+   * ICE (Interactive Connectivity Establishment): Ağ rotası keşfi
+   */
   async function createOfferForViewer(viewerId: string) {
     if (!localStreamRef.current || !socketRef.current) return;
 
+    // Yeni WebRTC bağlantısı oluştur
     const pc = new RTCPeerConnection({
       iceServers: [
+        // STUN sunucuları: NAT arkasındaki gerçek IP adresini bulmak için
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
       ],
     });
 
+    // Kamera ve mikrofon akışını bağlantıya ekle
     localStreamRef.current.getTracks().forEach((track) => {
       pc.addTrack(track, localStreamRef.current!);
     });
 
+    // ICE adayı bulunduğunda sinyal sunucusu üzerinden izleyiciye gönder
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         socketRef.current.emit('broadcaster-ice-candidate', {
@@ -185,8 +330,10 @@ export default function LiveAuctionControlPage() {
       }
     };
 
+    // Bağlantıyı Map'e kaydet (izleyici ayrılınca temizlemek için)
     peerConnectionsRef.current.set(viewerId, pc);
 
+    // SDP Offer oluştur ve sinyal sunucusu üzerinden izleyiciye gönder
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -196,27 +343,45 @@ export default function LiveAuctionControlPage() {
     });
   }
 
+  // --------------------------------------------------------------------------
+  // YAYIN DURDURMA
+  // --------------------------------------------------------------------------
+
+  /**
+   * Canlı yayını tamamen durdurur:
+   * 1. Kamerayı ve mikrofonu kapatır
+   * 2. Tüm izleyicilerle WebRTC bağlantısını keser
+   * 3. Socket.IO bağlantısını koparır
+   */
   function stopBroadcast() {
-    // Stop camera
+    // Kamerayı ve mikrofonu kapat
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
 
-    // Close all peer connections
+    // Tüm izleyici WebRTC bağlantılarını kapat
     peerConnectionsRef.current.forEach((pc) => pc.close());
     peerConnectionsRef.current.clear();
 
-    // Disconnect socket
+    // Socket.IO bağlantısını kapat
     socketRef.current?.disconnect();
     socketRef.current = null;
 
     setIsStreaming(false);
+    setConnectionStatus('disconnected');
     addLog('Yayın durduruldu');
   }
 
-  // Auctioneer API calls
+  // --------------------------------------------------------------------------
+  // MÜZAYEDECİ API ÇAĞRILARI
+  // --------------------------------------------------------------------------
+
+  /**
+   * Live-service API'sine istek gönderir.
+   * API gateway (port 4000) üzerinden /api/v1/auctioneer/* yoluna proxy edilir.
+   * Tüm istekler JWT token ile kimlik doğrulamalıdır.
+   */
   async function apiCall(path: string, method = 'POST', body?: object) {
-    const apiUrl =
-      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
     try {
       const res = await fetch(`${apiUrl}${path}`, {
         method,
@@ -228,7 +393,7 @@ export default function LiveAuctionControlPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        addLog(`API Hata: ${data.message || res.statusText}`);
+        addLog(`API Hata (${res.status}): ${data.message || res.statusText}`);
       }
       return data;
     } catch (err) {
@@ -237,25 +402,39 @@ export default function LiveAuctionControlPage() {
     }
   }
 
+  /**
+   * Müzayede oturumu oluşturur.
+   * Oturum, canlı müzayedeyi yönetmek için gereklidir.
+   * Müzayedenin lot listesini ve durumunu döndürür.
+   */
   async function createSession() {
+    addLog('Oturum oluşturuluyor...');
     const data = await apiCall('/auctioneer/sessions', 'POST', {
       auctionId,
     });
-    if (data) {
+    if (data && data.id) {
       setSession(data);
       addLog(`Oturum oluşturuldu: ${data.id}`);
+    } else if (data) {
+      // API farklı formatta dönebilir
+      addLog(`Yanıt: ${JSON.stringify(data).slice(0, 200)}`);
     }
   }
 
+  /** Oturumu başlatır - lotlar artık açılabilir duruma gelir */
   async function startSession() {
-    if (!session) return;
+    if (!session) {
+      addLog('Önce bir oturum oluşturun');
+      return;
+    }
     const data = await apiCall(
       `/auctioneer/sessions/${session.id}/start`,
       'POST',
     );
-    if (data) addLog('Oturum başlatıldı');
+    if (data) addLog('Oturum başlatıldı - artık lot açabilirsiniz');
   }
 
+  /** Oturumu sonlandırır ve yayını durdurur */
   async function endSession() {
     if (!session) return;
     const data = await apiCall(
@@ -265,60 +444,87 @@ export default function LiveAuctionControlPage() {
     if (data) {
       addLog('Oturum sonlandırıldı');
       stopBroadcast();
+      setSession(null);
     }
   }
 
+  /** Belirtilen lot numarasını müzayedeye açar - teklif almaya başlar */
   async function openLot(lotNumber: number) {
     const data = await apiCall(
       `/auctioneer/${auctionId}/lots/${lotNumber}/open`,
       'POST',
     );
-    if (data) addLog(`Lot #${lotNumber} açıldı`);
+    if (data) addLog(`Lot #${lotNumber} açıldı - teklifler bekleniyor`);
   }
 
+  /** "BİR KEZ!" çağrısı - 15 saniyelik geri sayım başlatır */
   async function goingOnce() {
     await apiCall(`/auctioneer/${auctionId}/going-once`, 'POST');
-    addLog('BİR KEZ çağrısı yapıldı');
+    addLog('BİR KEZ! çağrısı yapıldı (15 sn geri sayım)');
   }
 
+  /** "İKİ KEZ!" çağrısı - 10 saniyelik son geri sayım */
   async function goingTwice() {
     await apiCall(`/auctioneer/${auctionId}/going-twice`, 'POST');
-    addLog('İKİ KEZ çağrısı yapıldı');
+    addLog('İKİ KEZ! çağrısı yapıldı (10 sn geri sayım)');
   }
 
+  /** Lotu satıldı olarak işaretler - en yüksek teklif sahibi kazanır */
   async function soldLot(lotNumber: number) {
     const data = await apiCall(
       `/auctioneer/${auctionId}/lots/${lotNumber}/sold`,
       'POST',
     );
-    if (data) addLog(`Lot #${lotNumber} SATILDI`);
+    if (data) addLog(`Lot #${lotNumber} SATILDI!`);
   }
 
+  /** Lotu geçer - hiçbir teklif kabul edilmedi */
   async function passLot(lotNumber: number) {
     const data = await apiCall(
       `/auctioneer/${auctionId}/lots/${lotNumber}/pass`,
       'POST',
     );
-    if (data) addLog(`Lot #${lotNumber} GEÇİLDİ`);
+    if (data) addLog(`Lot #${lotNumber} GEÇİLDİ (satılmadı)`);
   }
+
+  // --------------------------------------------------------------------------
+  // KULLANICI ARAYÜZÜ (JSX)
+  // --------------------------------------------------------------------------
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        Müzayedeci Kontrol Paneli
-      </h1>
+      {/* Sayfa başlığı ve bağlantı durumu göstergesi */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Müzayedeci Kontrol Paneli
+        </h1>
+        <div className="flex items-center gap-2">
+          <span className={`w-3 h-3 rounded-full ${
+            connectionStatus === 'connected' ? 'bg-green-500' :
+            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+            'bg-gray-400'
+          }`} />
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {connectionStatus === 'connected' ? 'Bağlı' :
+             connectionStatus === 'connecting' ? 'Bağlanıyor...' :
+             'Bağlantı yok'}
+          </span>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Video Preview + Controls */}
+        {/* ===================== SOL PANEL: Video ve Kontroller ===================== */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Setup */}
+
+          {/* --- Müzayede Seçimi --- */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
             <h2 className="text-lg font-semibold mb-3">Müzayede Ayarları</h2>
-            {/* Live Auction Selector */}
+
+            {/* Aktif müzayede butonları - API'den gelen LIVE/PUBLISHED müzayedeler */}
             {liveAuctions.length > 0 && (
               <div className="mb-4">
                 <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Aktif Muzayedeler
+                  Aktif Müzayedeler
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {liveAuctions.map((a) => (
@@ -338,16 +544,17 @@ export default function LiveAuctionControlPage() {
               </div>
             )}
 
+            {/* Manuel müzayede ID girişi + oturum oluştur butonu */}
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Muzayede ID
+                  Müzayede ID
                 </label>
                 <input
                   type="text"
                   value={auctionId}
                   onChange={(e) => setAuctionId(e.target.value)}
-                  placeholder="Muzayede ID girin veya yukaridan secin"
+                  placeholder="Müzayede ID girin veya yukarıdan seçin"
                   className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
@@ -356,30 +563,40 @@ export default function LiveAuctionControlPage() {
                 disabled={!auctionId}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded text-sm font-medium"
               >
-                Oturum Olustur
+                Oturum Oluştur
               </button>
             </div>
+
+            {/* Aktif müzayede yoksa bilgilendirme mesajı */}
+            {liveAuctions.length === 0 && (
+              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                Şu an LIVE veya PUBLISHED durumunda müzayede bulunamadı.
+                Admin panelinden bir müzayede oluşturup yayınlayın.
+              </p>
+            )}
           </div>
 
-          {/* Camera Preview */}
+          {/* --- Kamera Önizleme --- */}
           <div className="bg-black rounded-lg overflow-hidden aspect-video relative">
             <video
               ref={videoRef}
               autoPlay
-              muted
-              playsInline
+              muted        // Kendi sesimizi duymamak için
+              playsInline  // iOS'ta tam ekrana geçmeyi engelle
               className="w-full h-full object-contain"
             />
+            {/* Kamera kapalıyken gösterilen mesaj */}
             {!isStreaming && (
               <div className="absolute inset-0 flex items-center justify-center text-white text-lg">
-                Kamera kapalı
+                Kamera kapalı - &quot;Yayını Başlat&quot; butonuna tıklayın
               </div>
             )}
+            {/* Yayın aktifken gösterilen durum bilgileri */}
             {isStreaming && (
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
                   <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  YAYIN
+                  CANLI
                 </span>
                 <span className="bg-black/60 text-white text-xs px-2 py-1 rounded">
                   {viewerCount} izleyici
@@ -388,8 +605,9 @@ export default function LiveAuctionControlPage() {
             )}
           </div>
 
-          {/* Broadcast Controls */}
+          {/* --- Yayın Kontrol Butonları --- */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow flex gap-3 flex-wrap">
+            {/* Yayın başlat/durdur butonu */}
             {!isStreaming ? (
               <button
                 onClick={startBroadcast}
@@ -406,6 +624,7 @@ export default function LiveAuctionControlPage() {
                 Yayını Durdur
               </button>
             )}
+            {/* Oturum başlat/bitir butonları */}
             <button
               onClick={startSession}
               disabled={!session}
@@ -422,27 +641,29 @@ export default function LiveAuctionControlPage() {
             </button>
           </div>
 
-          {/* Auctioneer Calls */}
+          {/* --- Müzayedeci Çağrıları (Going Once / Going Twice) --- */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
             <h2 className="text-lg font-semibold mb-3">Müzayedeci Çağrıları</h2>
             <div className="flex gap-3 flex-wrap">
               <button
                 onClick={goingOnce}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-bold text-lg"
+                disabled={!auctionId}
+                className="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-bold text-lg"
               >
                 BİR KEZ!
               </button>
               <button
                 onClick={goingTwice}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-bold text-lg"
+                disabled={!auctionId}
+                className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-bold text-lg"
               >
                 İKİ KEZ!
               </button>
             </div>
           </div>
 
-          {/* Lot Controls */}
-          {session?.lots && (
+          {/* --- Lot Yönetimi (Oturum oluşturduktan sonra görünür) --- */}
+          {session?.lots && session.lots.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
               <h2 className="text-lg font-semibold mb-3">Lot Yönetimi</h2>
               <div className="space-y-2">
@@ -456,18 +677,25 @@ export default function LiveAuctionControlPage() {
                       <span className="text-sm text-gray-500 ml-2">
                         {lot.product?.title}
                       </span>
+                      {/* Lot durum etiketi */}
                       <span
                         className={`text-xs ml-2 px-2 py-0.5 rounded ${
                           lot.status === 'ACTIVE'
                             ? 'bg-green-100 text-green-800'
                             : lot.status === 'SOLD'
                               ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-600'
+                              : lot.status === 'PASSED'
+                                ? 'bg-gray-200 text-gray-600'
+                                : 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        {lot.status}
+                        {lot.status === 'ACTIVE' ? 'AKTİF' :
+                         lot.status === 'SOLD' ? 'SATILDI' :
+                         lot.status === 'PASSED' ? 'GEÇİLDİ' :
+                         lot.status}
                       </span>
                     </div>
+                    {/* Lot eylem butonları */}
                     <div className="flex gap-2">
                       <button
                         onClick={() => openLot(lot.lotNumber)}
@@ -495,11 +723,12 @@ export default function LiveAuctionControlPage() {
           )}
         </div>
 
-        {/* Right: Activity Log */}
+        {/* ===================== SAĞ PANEL: Olay Günlüğü ===================== */}
         <div className="space-y-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow h-[600px] flex flex-col">
             <div className="px-4 py-3 border-b dark:border-gray-700">
               <h2 className="text-lg font-semibold">Olay Günlüğü</h2>
+              <p className="text-xs text-gray-500">Tüm işlemler burada görünür</p>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-1 font-mono text-xs">
               {logs.map((log, i) => (
@@ -512,7 +741,7 @@ export default function LiveAuctionControlPage() {
               ))}
               {logs.length === 0 && (
                 <p className="text-gray-400 text-center mt-10">
-                  Henüz olay yok
+                  Henüz olay yok - bir müzayede seçip yayını başlatın
                 </p>
               )}
             </div>

@@ -1,3 +1,16 @@
+/**
+ * Kayit Sayfasi (Register Page)
+ *
+ * Yeni kullanicilarin platforma uye olmasini saglayan kayit formudur.
+ *
+ * Ozellikler:
+ * - Ad, soyad, e-posta, telefon ve sifre alanlari
+ * - Zod ile kapsamli form dogrulamasi
+ * - Sifre guc gostergesi (zayif/orta/iyi/guclu/cok guclu)
+ * - KVKK ve kullanim sartlari onay kutucuklari
+ * - OAuth ile kayit (Google, Apple, Facebook)
+ * - Basarili kayit sonrasi profil sayfasina yonlendirme
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -10,6 +23,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/stores/auth-store";
 
+/**
+ * Kayit formu dogrulama semasi (Zod)
+ * - Ad/soyad: en az 2 karakter
+ * - E-posta: gecerli format
+ * - Telefon: en az 10 karakter, sadece rakam/bosluk/tire
+ * - Sifre: en az 8 karakter, bir buyuk harf ve bir rakam icermeli
+ * - Sifre onay: sifreyle eslesme kontrolu
+ * - KVKK ve kullanim sartlari onayi zorunlu
+ */
 const registerSchema = z
   .object({
     firstName: z.string().min(2, "Ad en az 2 karakter olmalidir"),
@@ -42,10 +64,12 @@ export default function RegisterPage() {
   const t = useTranslations("auth");
   const router = useRouter();
 
+  // Zustand auth store'dan kayit fonksiyonu ve durum bilgilerini al
   const { register, isLoading, error, clearError } = useAuthStore();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Sifre goster/gizle
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // Sifre onay goster/gizle
+  // Form alanlari icin state
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -56,10 +80,12 @@ export default function RegisterPage() {
     kvkkConsent: false,
     termsConsent: false,
   });
+  // Form dogrulama hata mesajlari
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
 
+  // Form alani degistiginde state'i guncelle ve ilgili dogrulama hatasini temizle
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
@@ -70,9 +96,11 @@ export default function RegisterPage() {
     clearError();
   };
 
+  // Form gonderildiginde dogrulama yap ve kayit API'sini cagir
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Zod ile tum form verilerini dogrula
     const result = registerSchema.safeParse(formData);
     if (!result.success) {
       const errors: Record<string, string> = {};
@@ -86,6 +114,7 @@ export default function RegisterPage() {
     }
 
     try {
+      // Auth store uzerinden kayit API'sine istek gonder
       await register({
         email: formData.email,
         phone: formData.phone,
@@ -100,7 +129,7 @@ export default function RegisterPage() {
     }
   };
 
-  // Password strength indicator
+  // Sifre guc gostergesi - sifrenin karmasikligina gore puan ve etiket dondurur
   const getPasswordStrength = (
     password: string
   ): { score: number; label: string; color: string } => {

@@ -1,3 +1,12 @@
+/**
+ * Hakkimizda Sayfasi (About Page)
+ *
+ * Platform hakkinda genel bilgi sunan statik sayfa. Icerik olarak:
+ * - Platform istatistikleri (uye sayisi, islem hacmi vb.)
+ * - Misyon ve vizyon aciklamalari
+ * - Platformun avantajlari ve ozellikleri
+ * - Iletisim bilgileri (adres, telefon, e-posta)
+ */
 'use client';
 
 import { Shield, Users, Globe, Award, Building, Phone, Mail, MapPin } from 'lucide-react';
@@ -14,7 +23,7 @@ export default function AboutPage() {
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Istatistikler - Platformun sayisal basarilari */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16">
         {[
           { value: '50.000+', label: 'Kayıtlı Üye' },
@@ -29,7 +38,7 @@ export default function AboutPage() {
         ))}
       </div>
 
-      {/* Mission */}
+      {/* Misyon ve Vizyon - Platformun amac ve hedeflerini aciklar */}
       <div className="grid md:grid-cols-2 gap-12 mb-16">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Misyonumuz</h2>
@@ -57,7 +66,7 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* Features */}
+      {/* Ozellikler - Platformun sundugu avantajlar (guvenlik, dil destegi, blockchain vb.) */}
       <div className="mb-16">
         <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">Neden Biz?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -78,7 +87,7 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* Contact */}
+      {/* Iletisim - Adres, telefon ve e-posta bilgileri */}
       <div className="bg-gray-50 rounded-2xl p-8 md:p-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">İletişim</h2>
         <div className="grid md:grid-cols-3 gap-6">

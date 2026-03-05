@@ -1,3 +1,15 @@
+/**
+ * Footer (Alt Bilgi) Bileseni
+ *
+ * Uygulamanin tum sayfalarda gorunen alt kisim bilesenini olusturur.
+ * Icerir:
+ * - Bulten (newsletter) abonelik formu
+ * - Marka bilgisi ve sosyal medya linkleri
+ * - Hizli erisim linkleri (muzayedeler, nasil calisir vb.)
+ * - Yasal sayfalar linkleri (sartlar, gizlilik, KVKK vb.)
+ * - Iletisim bilgileri (adres, telefon, e-posta)
+ * - Telif hakki ve guvenlik bilgileri
+ */
 "use client";
 
 import React from "react";
@@ -17,14 +29,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export function Footer() {
+  // Aktif dil kodu (tr, en, ar)
   const locale = useLocale();
+  // Footer cevirileri icin ceviri fonksiyonu
   const t = useTranslations("footer");
 
+  // Telif hakki bilgisi icin guncel yil
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="border-t border-[var(--border)] bg-navy-950 text-gray-300">
-      {/* Newsletter Section */}
+      {/* --- Bulten (Newsletter) Abonelik Bolumu ---
+          Kullanicilarin e-posta adresi girerek bultene abone olmasini saglar */}
       <div className="border-b border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-8 md:flex-row">
           <div>
@@ -44,10 +60,12 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Main Footer Content */}
+      {/* --- Ana Footer Icerigi ---
+          Dort kolonlu grid yapisi: Marka, Hizli Linkler, Yasal, Iletisim */}
       <div className="mx-auto max-w-7xl px-4 py-12">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
-          {/* Brand */}
+          {/* --- Marka Bolumu ---
+              Logo, marka aciklamasi ve sosyal medya ikonlari */}
           <div className="space-y-4">
             <Link href={`/${locale}`} className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500">
@@ -60,6 +78,7 @@ export function Footer() {
             <p className="text-sm leading-relaxed text-gray-400">
               {t("brandDescription")}
             </p>
+            {/* Sosyal medya linkleri */}
             <div className="flex gap-3">
               <a
                 href="#"
@@ -88,7 +107,8 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Quick Links */}
+          {/* --- Hizli Erisim Linkleri ---
+              Tum muzayedeler, canli, yaklasan, nasil calisir ve bizimle satin */}
           <div>
             <h4 className="mb-4 font-display text-sm font-semibold uppercase tracking-wider text-white">
               {t("quickLinks")}
@@ -137,7 +157,8 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Legal */}
+          {/* --- Yasal Bilgiler Linkleri ---
+              Kullanim sartlari, gizlilik politikasi, KVKK, cerez politikasi, hakkimizda */}
           <div>
             <h4 className="mb-4 font-display text-sm font-semibold uppercase tracking-wider text-white">
               {t("legal")}
@@ -186,7 +207,8 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Contact */}
+          {/* --- Iletisim Bilgileri ---
+              Fiziksel adres, telefon numarasi ve e-posta adresi */}
           <div>
             <h4 className="mb-4 font-display text-sm font-semibold uppercase tracking-wider text-white">
               {t("contact")}
@@ -220,7 +242,8 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Bottom Bar */}
+      {/* --- Alt Cubuk ---
+          Telif hakki bilgisi, SSL guvenlik ve lisans bilgileri */}
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-gray-500 sm:flex-row">
           <p>

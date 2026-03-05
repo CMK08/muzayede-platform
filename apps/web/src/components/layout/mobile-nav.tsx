@@ -1,3 +1,19 @@
+/**
+ * MobileNav -- Mobil cihazlar icin yan menu (sidebar) navigasyon bileseni.
+ *
+ * Soldan kayarak acilan bir panel seklinde calisir. Icerir:
+ *  - Arama alani
+ *  - Giris yapmis kullanicinin ad/soyad ve e-posta bilgisi
+ *  - Ana sayfa, muzayedeler, yaklasan, one cikan gibi genel baglantilari
+ *  - Oturum acmis kullanicilara ozel (panel, favoriler, tekliflerim, ayarlar) baglantilari
+ *  - Giris/Kayit veya Cikis butonlari
+ *
+ * lg (1024px) ve uzeri ekranlarda gizlenir; yalnizca mobil/tablet gorunumde aktiftir.
+ *
+ * Props:
+ *  - isOpen  : Menunun acik olup olmadigini belirler
+ *  - onClose : Menu kapatildiginda cagrilan fonksiyon
+ */
 "use client";
 
 import React from "react";
@@ -26,10 +42,14 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
+  // Aktif dil bilgisi -- tum baglanti yollarinda kullanilir
   const locale = useLocale();
+  // Ortak ceviri metinleri
   const t = useTranslations("common");
+  // Zustand auth store'undan kullanici bilgisi, oturum durumu ve cikis fonksiyonu
   const { user, isAuthenticated, logout } = useAuthStore();
 
+  // Tum kullanicilarin gorebilecegi ana navigasyon oegeleri
   const navItems = [
     { href: `/${locale}`, label: t("home"), icon: Home },
     { href: `/${locale}/auctions`, label: t("auctions"), icon: Gavel },
@@ -45,6 +65,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     },
   ];
 
+  // Yalnizca oturum acmis kullanicilara gosterilen hesap baglantilari
   const userNavItems = isAuthenticated
     ? [
         { href: `/${locale}/profile`, label: t("dashboard"), icon: User },
@@ -68,7 +89,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
   return (
     <>
-      {/* Overlay */}
+      {/* Arka plan karartma katmani -- tiklandiginda menuyu kapatir */}
       <div
         className={cn(
           "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
@@ -77,14 +98,14 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         onClick={onClose}
       />
 
-      {/* Sidebar */}
+      {/* Yan panel -- soldan kayarak acilir, kapaninca ekran disina kayar */}
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-80 transform bg-[var(--card)] shadow-xl transition-transform duration-300 lg:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Header */}
+        {/* Baslik -- Logo ve kapat butonu */}
         <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
           <Link
             href={`/${locale}`}
@@ -106,7 +127,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           </button>
         </div>
 
-        {/* Search */}
+        {/* Arama alani */}
         <div className="border-b border-[var(--border)] p-4">
           <Input
             placeholder={t("searchPlaceholder")}
@@ -114,7 +135,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           />
         </div>
 
-        {/* User Info */}
+        {/* Kullanici bilgisi -- Oturum acmissa ad/soyad basliklari ve e-posta gosterilir */}
         {isAuthenticated && user && (
           <div className="border-b border-[var(--border)] p-4">
             <div className="flex items-center gap-3">
@@ -134,7 +155,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           </div>
         )}
 
-        {/* Navigation */}
+        {/* Navigasyon linkleri -- ana ogeler ve (varsa) kullanici ozel ogeleri */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-1">
             {navItems.map((item) => (
@@ -173,7 +194,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           )}
         </nav>
 
-        {/* Bottom Actions */}
+        {/* Alt kisim -- Oturum aciksa cikis butonu, degilse giris/kayit butonlari */}
         <div className="border-t border-[var(--border)] p-4">
           {isAuthenticated ? (
             <Button

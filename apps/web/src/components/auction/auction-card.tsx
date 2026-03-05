@@ -1,3 +1,14 @@
+/**
+ * AuctionCard -- Muzayede (acik artirma) kart bileseni.
+ *
+ * Her bir muzayede ogesini gorsel, durum etiketi, fiyat, geri sayim
+ * ve teklif/izlenme sayilari ile birlikte kart seklinde gosterir.
+ * Kart tiklandiginda ilgili muzayede detay sayfasina yonlendirir.
+ *
+ * Props:
+ *  - auction : Gosterilecek muzayede verisi (AuctionItem)
+ *  - compact : true ise daha kucuk ic bosluk (padding) kullanilir
+ */
 "use client";
 
 import React from "react";
@@ -16,6 +27,7 @@ interface AuctionCardProps {
   compact?: boolean;
 }
 
+// Muzayede durumuna gore Badge bileseninin renk varyantini belirleyen esleme tablosu
 const statusBadgeVariant: Record<
   AuctionItem["status"],
   "live" | "success" | "warning" | "secondary" | "destructive" | "default"
@@ -28,6 +40,7 @@ const statusBadgeVariant: Record<
   cancelled: "destructive",
 };
 
+// Muzayede durumunun kullaniciya gosterilecek Turkce karsiliklari
 const statusLabels: Record<AuctionItem["status"], string> = {
   active: "Canlı",
   ending_soon: "Bitiyor",
@@ -38,7 +51,9 @@ const statusLabels: Record<AuctionItem["status"], string> = {
 };
 
 export function AuctionCard({ auction, compact = false }: AuctionCardProps) {
+  // Aktif dil bilgisi -- link yollarinda kullanilir
   const locale = useLocale();
+  // Cevirileri "auction" namespace'inden ceker
   const t = useTranslations("auction");
 
   return (
@@ -61,7 +76,7 @@ export function AuctionCard({ auction, compact = false }: AuctionCardProps) {
             </Badge>
           </div>
 
-          {/* Watchlist Button */}
+          {/* Favori / Izleme Listesi Butonu -- Link tiklamasini engellemek icin stopPropagation kullanilir */}
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -115,7 +130,7 @@ export function AuctionCard({ auction, compact = false }: AuctionCardProps) {
               </p>
             </div>
 
-            {/* Countdown */}
+            {/* Geri Sayim -- Yalnizca aktif veya bitmek uzere olan muzayedelerde gosterilir */}
             {(auction.status === "active" ||
               auction.status === "ending_soon") && (
               <CountdownTimer
@@ -126,7 +141,7 @@ export function AuctionCard({ auction, compact = false }: AuctionCardProps) {
             )}
           </div>
 
-          {/* Starting Price */}
+          {/* Baslangic Fiyati -- Guncel fiyat baslangictan farkliysa, eski fiyat ustu cizili gosterilir */}
           {auction.currentPrice !== auction.startingPrice && (
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               {t("startingPrice")}:{" "}

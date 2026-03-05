@@ -1,3 +1,17 @@
+/**
+ * AuctionImage & AuctionImagePlaceholder -- Muzayede gorsel bilesenleri.
+ *
+ * AuctionImage:
+ *   Next.js Image bilesenini sarar. Gorsel kaynagi bos, gecersiz veya
+ *   yuklenirken hata olusursa otomatik olarak AuctionImagePlaceholder
+ *   gosterir. Boylece kirik gorsel ikonu yerine marka renklerinde
+ *   sik bir yer tutucu goruntulenir.
+ *
+ * AuctionImagePlaceholder:
+ *   Gorsel mevcut olmadiginda gosterilen yer tutucu bilesen.
+ *   Koyu arka plan uzerinde cekic (gavel) ikonu ve "MUZAYEDE"
+ *   yazisi ile platform marka kimligini yansitir.
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -6,9 +20,8 @@ import { Gavel } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Inline SVG placeholder shown when an auction image fails to load or is missing.
- * Renders a dark background with a gavel icon and "MUZAYEDE" text, matching
- * the overall platform brand colors (navy + gold).
+ * Gorsel yuklenemediginde veya mevcut olmadiginda gosterilen yer tutucu bilesen.
+ * Koyu (navy) arka plan uzerinde cekic ikonu ve "MUZAYEDE" yazisi gosterir.
  */
 export function AuctionImagePlaceholder({
   className,
@@ -24,7 +37,7 @@ export function AuctionImagePlaceholder({
         className
       )}
     >
-      {/* Subtle radial highlight */}
+      {/* Hafif radyal isik efekti -- gorsel derinlik hissi verir */}
       <div className="absolute inset-0 opacity-20 pointer-events-none">
         <div
           className="h-full w-full"
@@ -35,7 +48,7 @@ export function AuctionImagePlaceholder({
         />
       </div>
 
-      {/* Gavel icon */}
+      {/* Cekic ikonu -- muzayede platformunun temel simgesi */}
       <div className="relative mb-2">
         <div className="rounded-xl bg-primary-500/10 p-3">
           <Gavel
@@ -47,7 +60,7 @@ export function AuctionImagePlaceholder({
         </div>
       </div>
 
-      {/* Text */}
+      {/* Marka yazisi -- compact modda gizlenir */}
       {!compact && (
         <>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary-400/50">
@@ -63,9 +76,10 @@ export function AuctionImagePlaceholder({
 }
 
 /**
- * A wrapper around Next.js Image that gracefully handles missing or broken
- * auction images. When the image source is invalid, empty, or fails to load,
- * it shows the AuctionImagePlaceholder instead of a broken image icon.
+ * Next.js Image etrafinda sarmalayici bilesen.
+ * Gecersiz, bos veya yuklenemeyen gorseller icin otomatik olarak
+ * AuctionImagePlaceholder gosterir. Boylece kullanici asla
+ * kirik gorsel ikonu gormez.
  */
 interface AuctionImageProps extends Omit<ImageProps, "onError" | "src"> {
   src?: string | null;
@@ -81,15 +95,18 @@ export function AuctionImage({
   className,
   ...props
 }: AuctionImageProps) {
+  // Gorsel yukleme hatasi olup olmadigini takip eden state
   const [hasError, setHasError] = useState(false);
 
-  // Determine if we have a valid image source
+  // Gecerli bir gorsel kaynagi olup olmadigini kontrol et
+  // Yer tutucu dosya adlari ve yerel /images/ yollari gecersiz sayilir (seed verileri)
   const isValidSrc =
     src &&
     src.trim() !== "" &&
     !src.endsWith("placeholder-auction.jpg") &&
     !src.startsWith("/images/"); // local /images/ paths don't exist — seed data placeholders
 
+  // Kaynak gecersizse veya yukleme hatasi olduysa yer tutucu goster
   if (!isValidSrc || hasError) {
     return (
       <AuctionImagePlaceholder
@@ -99,6 +116,7 @@ export function AuctionImage({
     );
   }
 
+  // Gecerli gorsel -- hata olusursa onError ile yer tutucuya geri donulur
   return (
     <Image
       src={src}

@@ -1,3 +1,16 @@
+/**
+ * Favoriler / Takip Listesi Sayfasi (Favorites Page)
+ *
+ * Kullanicinin favori olarak isaretledigi muzayedeleri goruntuler.
+ *
+ * Ozellikler:
+ * - Favori muzayedeleri kart gorunumunde listeleme
+ * - Bildirim acma/kapama (muzayede basladiginda haberdar olma)
+ * - Favorilerden cikarma
+ * - Muzayede durumu (canli, yakinda, sona erdi, satildi) gosterimi
+ * - Guncel fiyat ve kalan sure bilgisi
+ * - Bos liste durumunda muzayede kesfetme yonlendirmesi
+ */
 "use client";
 
 import React, { useState } from "react";
@@ -19,6 +32,7 @@ import { AuctionImage } from "@/components/auction/auction-image";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 import { useFavorites, useToggleFavorite } from "@/hooks/use-dashboard";
 
+// Favori muzayede oge tipini tanimlar
 interface FavoriteItem {
   id: string;
   auctionId: string;
@@ -32,6 +46,7 @@ interface FavoriteItem {
   notifyOnStart: boolean;
 }
 
+// Her muzayede durumu icin etiket metni ve badge varyant rengi eslestirmesi
 const statusConfig: Record<
   string,
   { label: string; variant: "live" | "secondary" | "success" | "default" }
@@ -47,9 +62,12 @@ export default function FavoritesPage() {
   void t; // TODO: replace hardcoded strings with t() calls
   const locale = useLocale();
 
+  // API'den favori listesini cek (sayfa 1, en fazla 50 oge)
   const { data: favoritesData, isLoading } = useFavorites(1, 50);
+  // Favori ekleme/cikarma mutasyonu
   const toggleFavoriteMutation = useToggleFavorite();
 
+  // API verisini FavoriteItem formatina donustur (farkli API yapilarini normalize eder)
   const apiFavorites: FavoriteItem[] = (favoritesData?.data || []).map((f: Record<string, unknown>) => {
     const auction = (f.auction || {}) as Record<string, unknown>;
     const images = (auction.images || []) as string[];
@@ -67,15 +85,17 @@ export default function FavoritesPage() {
     };
   });
 
+  // Lokal favori listesi state'i (bildirim ac/kapa gibi yerel islemler icin)
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
 
-  // Sync API data to local state
+  // API verisini lokal state ile senkronize et
   React.useEffect(() => {
     if (apiFavorites.length > 0) {
       setFavorites(apiFavorites);
     }
   }, [favoritesData]);
 
+  // Favoriyi sil: API mutasyonunu cagir ve lokal listeden cikar
   const removeFavorite = (id: string) => {
     const fav = favorites.find((f) => f.id === id);
     if (fav) {
@@ -84,6 +104,7 @@ export default function FavoritesPage() {
     setFavorites((prev) => prev.filter((f) => f.id !== id));
   };
 
+  // Bildirim durumunu ac/kapat (muzayede basladiginda haberdar olma)
   const toggleNotify = (id: string) => {
     setFavorites((prev) =>
       prev.map((f) =>

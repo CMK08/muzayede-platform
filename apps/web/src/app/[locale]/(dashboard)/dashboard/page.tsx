@@ -1,3 +1,12 @@
+/**
+ * Dashboard Yonlendirme Sayfasi (Dashboard Redirect Page)
+ *
+ * Kullanici rolune gore uygun panele otomatik yonlendirme yapar:
+ * - ADMIN veya SUPER_ADMIN -> /admin/dashboard (yonetici paneli)
+ * - Diger roller -> /profile (kullanici profili)
+ *
+ * Yonlendirme gerceklesene kadar bir yukleniyor animasyonu gosterir.
+ */
 "use client";
 
 import { useEffect } from "react";
@@ -8,8 +17,10 @@ import { useAuthStore } from "@/stores/auth-store";
 export default function DashboardRedirectPage() {
   const router = useRouter();
   const locale = useLocale();
+  // Auth store'dan kullanici bilgilerini al (rol kontrolu icin)
   const { user } = useAuthStore();
 
+  // Kullanici rolune gore yonlendirme yap
   useEffect(() => {
     const role = user?.role;
     if (role === "SUPER_ADMIN" || role === "ADMIN") {
